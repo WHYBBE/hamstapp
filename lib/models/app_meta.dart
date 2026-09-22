@@ -8,6 +8,15 @@ class AppMeta {
   List<String> categoryIds;
   int firstSeenAt;
 
+  /// Last known display name, kept even after the app is uninstalled.
+  String lastKnownName;
+
+  /// Why the user removed the app.
+  String uninstallReason;
+
+  /// Timestamp when the uninstall was detected; 0 means still installed.
+  int uninstalledAt;
+
   AppMeta({
     required this.packageName,
     this.reason = '',
@@ -16,6 +25,9 @@ class AppMeta {
     this.pinned = false,
     List<String>? categoryIds,
     int? firstSeenAt,
+    this.lastKnownName = '',
+    this.uninstallReason = '',
+    this.uninstalledAt = 0,
   })  : categoryIds = categoryIds ?? <String>[],
         firstSeenAt =
             firstSeenAt ?? DateTime.now().millisecondsSinceEpoch;
@@ -28,6 +40,9 @@ class AppMeta {
         pinned: map['pinned'] as bool? ?? false,
         categoryIds: (map['categoryIds'] as List?)?.cast<String>() ?? [],
         firstSeenAt: map['firstSeenAt'] as int?,
+        lastKnownName: map['lastKnownName'] as String? ?? '',
+        uninstallReason: map['uninstallReason'] as String? ?? '',
+        uninstalledAt: map['uninstalledAt'] as int? ?? 0,
       );
 
   Map<String, dynamic> toMap() => {
@@ -38,12 +53,18 @@ class AppMeta {
         'pinned': pinned,
         'categoryIds': categoryIds,
         'firstSeenAt': firstSeenAt,
+        'lastKnownName': lastKnownName,
+        'uninstallReason': uninstallReason,
+        'uninstalledAt': uninstalledAt,
       };
+
+  bool get isUninstalled => uninstalledAt != 0;
 
   bool get hasUserData =>
       reason.isNotEmpty ||
       note.isNotEmpty ||
       favorite ||
       pinned ||
-      categoryIds.isNotEmpty;
+      categoryIds.isNotEmpty ||
+      uninstallReason.isNotEmpty;
 }

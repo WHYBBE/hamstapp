@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../utils/format.dart';
 import '../widgets/app_tile.dart';
+import '../widgets/uninstall_reason.dart';
 import 'app_detail_screen.dart';
 
 class AppsScreen extends StatelessWidget {
@@ -12,39 +13,69 @@ class AppsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    final showUninstalled = state.filter == AppFilter.uninstalled;
     final apps = state.visibleApps;
 
     return Column(
       children: [
         _SearchBar(state: state),
         _FilterRow(state: state),
-        _StatsBar(state: state, shown: apps.length),
+        _StatsBar(state: state, shown: showUninstalled ? state.uninstalledApps.length : apps.length),
         Expanded(
           child: RefreshIndicator(
             onRefresh: state.scan,
-            child: apps.isEmpty
-                ? _EmptyView(state: state)
-                : ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    itemCount: apps.length,
-                    itemBuilder: (context, i) {
-                      final app = apps[i];
-                      return AppListTile(
-                        app: app,
-                        state: state,
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                AppDetailScreen(packageName: app.packageName),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+            child: showUninstalled
+                ? _UninstalledList(state: state)
+                : apps.isEmpty
+                    ? _EmptyView(state: state)
+                    : ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        itemCount: apps.length,
+                        itemBuilder: (context, i) {
+                          final app = apps[i];
+                          return AppListTile(
+                            app: app,
+                            state: state,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AppDetailScreen(
+                                    packageName: app.packageName),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _UninstalledList extends StatelessWidget {
+  const _UninstalledList({required this.state});
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = state.uninstalledApps;
+    if (items.isEmpty) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: const [
+          SizedBox(height: 120),
+          Icon(Icons.history_toggle_off, size: 64, color: Colors.grey),
+          SizedBox(height: 12),
+          Center(child: Text('还没有卸载记录')),
+        ],
+      );
+    }
+    return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
+      itemCount: items.length,
+      itemBuilder: (context, i) =>
+          UninstalledTile(meta: items[i], state: state),
     );
   }
 }
@@ -147,6 +178,7 @@ class _FilterRow extends StatelessWidget {
     AppFilter.categorized: '已分类',
     AppFilter.uncategorized: '未分类',
     AppFilter.hasReason: '有原因',
+    AppFilter.uninstalled: '🗑️已卸载',
   };
 
   @override
@@ -201,8 +233,10 @@ class _StatsBar extends StatelessWidget {
         ? '正在扫描…'
         : last == null
             ? '尚未扫描，下拉刷新'
-            : '共 ${state.apps.length} 个应用（用户 ${state.userAppCount} / 系统 ${state.systemAppCount}）'
-                ' · 显示 $shown · 用时 ${state.lastScanMs} ms · ${Fmt.relative(last.millisecondsSinceEpoch)}';
+            : state.filter == AppFilter.uninstalled
+                ? '卸载记录 $shown 条 · 上次扫描 ${Fmt.relative(last.millisecondsSinceEpoch)}'
+                : '共 ${state.apps.length} 个应用（用户 ${state.userAppCount} / 系统 ${state.systemAppCount}）'
+                    ' · 显示 $shown · 用时 ${state.lastScanMs} ms · ${Fmt.relative(last.millisecondsSinceEpoch)}';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
       child: Row(

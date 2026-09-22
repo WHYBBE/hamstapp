@@ -10,7 +10,16 @@ import '../models/snapshot.dart';
 import '../services/native_apps.dart';
 import '../services/storage.dart';
 
-enum AppFilter { all, user, system, favorite, categorized, uncategorized, hasReason }
+enum AppFilter {
+  all,
+  user,
+  system,
+  favorite,
+  categorized,
+  uncategorized,
+  hasReason,
+  uninstalled,
+}
 
 enum AppSort { name, installTime, updateTime, size }
 
@@ -24,6 +33,10 @@ class AppState extends ChangeNotifier {
   List<AppCategory> categories = <AppCategory>[];
   List<Snapshot> snapshots = <Snapshot>[];
   List<BackupList> backupLists = <BackupList>[];
+
+  /// Apps detected as uninstalled during the most recent scan and that the
+  /// user has not been asked about yet this session.
+  List<AppMeta> pendingUninstalls = <AppMeta>[];
 
   bool initialized = false;
   bool scanning = false;
@@ -108,17 +121,23 @@ class AppState extends ChangeNotifier {
     if (scanning) return;
     scanning = true;
     scanError = null;
+    pendingUninstalls = <AppMeta>[];
     notifyListeners();
+
+    // Baseline used to detect removals: the most recent snapshot if one
+    // exists ("当前 vs 上次快照"), otherwise the previous scan result.
+    final baseline = _baseline();
 
     final sw = Stopwatch()..start();
     try {
       final result =
           await NativeApps.getInstalledApps(includeSystem: includeSystemInScan);
       result.sort((a, b) => a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
-      apps = result;
 
       final now = DateTime.now();
-      for (final app in apps) {
+      final current = <String>{};
+      for (final app in result) {
+        current.add(app.packageName);
         final m = meta.putIfAbsent(
           app.packageName,
           () => AppMeta(
@@ -127,8 +146,36 @@ class AppState extends ChangeNotifier {
           ),
         );
         m.packageName = app.packageName;
+        m.lastKnownName = app.appName;
+        if (m.uninstalledAt != 0) {
+          // App came back -> clear the previous uninstall record.
+          m.uninstalledAt = 0;
+          m.uninstallReason = '';
+        }
       }
 
+      // Detect apps that were present in the baseline but are gone now.
+      final pending = <AppMeta>[];
+      for (final entry in baseline.entries) {
+        final pkg = entry.key;
+        if (current.contains(pkg)) continue;
+        final m = meta.putIfAbsent(
+          pkg,
+          () => AppMeta(
+            packageName: pkg,
+            firstSeenAt: now.millisecondsSinceEpoch,
+          ),
+        );
+        if (m.lastKnownName.isEmpty) m.lastKnownName = entry.value;
+        if (m.uninstalledAt == 0) {
+          m.uninstalledAt = now.millisecondsSinceEpoch;
+          m.uninstallReason = '';
+          pending.add(m);
+        }
+      }
+      pendingUninstalls = pending;
+
+      apps = result;
       await storage.writeJson(
           _kAppsCache, apps.map((e) => e.toMap()).toList());
       await _persistMeta();
@@ -144,6 +191,32 @@ class AppState extends ChangeNotifier {
       scanning = false;
       notifyListeners();
     }
+  }
+
+  Map<String, String> _baseline() {
+    if (snapshots.isNotEmpty) {
+      final latest = snapshots.reduce(
+          (a, b) => a.createdAt >= b.createdAt ? a : b);
+      if (latest.entries.isNotEmpty) {
+        return {
+          for (final e in latest.entries) e.packageName: e.appName,
+        };
+      }
+    }
+    return {for (final a in apps) a.packageName: a.appName};
+  }
+
+  void clearPendingUninstalls() {
+    if (pendingUninstalls.isEmpty) return;
+    pendingUninstalls = <AppMeta>[];
+    notifyListeners();
+  }
+
+  /// All apps ever seen that are currently uninstalled, newest first.
+  List<AppMeta> get uninstalledApps {
+    final list = meta.values.where((m) => m.isUninstalled).toList()
+      ..sort((a, b) => b.uninstalledAt.compareTo(a.uninstalledAt));
+    return list;
   }
 
   // ---------------------------------------------------------------- meta
@@ -165,6 +238,7 @@ class AppState extends ChangeNotifier {
     bool? favorite,
     bool? pinned,
     List<String>? categoryIds,
+    String? uninstallReason,
   }) async {
     final m = metaFor(packageName);
     if (reason != null) m.reason = reason;
@@ -172,6 +246,7 @@ class AppState extends ChangeNotifier {
     if (favorite != null) m.favorite = favorite;
     if (pinned != null) m.pinned = pinned;
     if (categoryIds != null) m.categoryIds = categoryIds;
+    if (uninstallReason != null) m.uninstallReason = uninstallReason;
     await _persistMeta();
     notifyListeners();
   }
@@ -353,6 +428,9 @@ class AppState extends ChangeNotifier {
         case AppFilter.hasReason:
           if (metaFor(app.packageName).reason.isEmpty) return false;
           break;
+        case AppFilter.uninstalled:
+          // Handled separately via [uninstalledApps].
+          return false;
         case AppFilter.all:
           break;
       }

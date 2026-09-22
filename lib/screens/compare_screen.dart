@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/snapshot.dart';
 import '../models/snapshot_diff.dart';
+import '../state/app_state.dart';
 import '../utils/format.dart';
 import '../widgets/app_icon.dart';
+import '../widgets/uninstall_reason.dart';
 
 class CompareScreen extends StatefulWidget {
   const CompareScreen({
@@ -68,7 +71,11 @@ class _CompareScreenState extends State<CompareScreen> {
               child: TabBarView(
                 children: [
                   _DiffList(items: _diff.added, emptyText: '没有新增应用', unchanged: _showUnchanged ? _diff.unchanged : null),
-                  _DiffList(items: _diff.removed, emptyText: '没有卸载应用'),
+                  _DiffList(
+                    items: _diff.removed,
+                    emptyText: '没有卸载应用',
+                    allowUninstallReason: true,
+                  ),
                   _DiffList(items: _diff.updated, emptyText: '没有应用更新', showVersion: true),
                 ],
               ),
@@ -133,21 +140,41 @@ class _DiffList extends StatelessWidget {
     required this.emptyText,
     this.showVersion = false,
     this.unchanged,
+    this.allowUninstallReason = false,
   });
 
   final List<DiffItem> items;
   final String emptyText;
   final bool showVersion;
   final List<DiffItem>? unchanged;
+  final bool allowUninstallReason;
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty && (unchanged == null || unchanged!.isEmpty)) {
       return Center(child: Text(emptyText));
     }
+    final state = allowUninstallReason ? context.watch<AppState>() : null;
     return ListView(
       children: [
-        ...items.map((e) => _DiffTile(item: e, showVersion: showVersion)),
+        ...items.map((e) {
+          final reason = allowUninstallReason
+              ? state!.metaFor(e.packageName).uninstallReason
+              : '';
+          return _DiffTile(
+            item: e,
+            showVersion: showVersion,
+            uninstallReason: reason,
+            onEditReason: allowUninstallReason
+                ? () => showUninstallReasonDialog(
+                      context,
+                      state!,
+                      e.packageName,
+                      e.appName,
+                    )
+                : null,
+          );
+        }),
         if (unchanged != null && unchanged!.isNotEmpty) ...[
           const Divider(),
           Padding(
@@ -163,10 +190,17 @@ class _DiffList extends StatelessWidget {
 }
 
 class _DiffTile extends StatelessWidget {
-  const _DiffTile({required this.item, required this.showVersion});
+  const _DiffTile({
+    required this.item,
+    required this.showVersion,
+    this.uninstallReason = '',
+    this.onEditReason,
+  });
 
   final DiffItem item;
   final bool showVersion;
+  final String uninstallReason;
+  final VoidCallback? onEditReason;
 
   @override
   Widget build(BuildContext context) {
@@ -177,17 +211,29 @@ class _DiffTile extends StatelessWidget {
       DiffType.unchanged => (Icons.check_circle_outline, Colors.grey),
     };
 
+    final base = showVersion && item.fromVersion.isNotEmpty
+        ? '${item.fromVersion}  →  ${item.toVersion}'
+        : '${item.packageName}${item.sizeBytes > 0 ? ' · ${Fmt.size(item.sizeBytes)}' : ''}';
+
     return ListTile(
       leading: AppIcon(packageName: item.packageName, label: item.appName, size: 40),
       title: Text(item.appName, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
-        showVersion && item.fromVersion.isNotEmpty
-            ? '${item.fromVersion}  →  ${item.toVersion}'
-            : '${item.packageName}${item.sizeBytes > 0 ? ' · ${Fmt.size(item.sizeBytes)}' : ''}',
-        maxLines: 1,
+        uninstallReason.isNotEmpty ? '🗑️ $uninstallReason\n$base' : base,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
-      trailing: Icon(icon, color: color),
+      isThreeLine: uninstallReason.isNotEmpty,
+      trailing: onEditReason != null
+          ? IconButton(
+              tooltip: uninstallReason.isEmpty ? '添加卸载原因' : '编辑卸载原因',
+              icon: Icon(
+                uninstallReason.isEmpty ? Icons.edit_outlined : Icons.check_circle,
+                color: uninstallReason.isEmpty ? Colors.grey : Colors.green,
+              ),
+              onPressed: onEditReason,
+            )
+          : Icon(icon, color: color),
     );
   }
 }

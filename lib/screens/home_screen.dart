@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
+import '../widgets/uninstall_reason.dart';
 import 'apps_screen.dart';
 import 'backup_lists_screen.dart';
 import 'categories_screen.dart';
@@ -17,6 +18,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
+  bool _uninstallSheetVisible = false;
 
   static const _titles = ['囤囤', '快速启动', '快照对比', '备份列表', '分类'];
 
@@ -28,6 +30,22 @@ class _HomeScreenState extends State<HomeScreen> {
     if (state.initialized && state.apps.isEmpty && !state.scanning) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && state.apps.isEmpty && !state.scanning) state.scan();
+      });
+    }
+
+    // After a scan detects uninstalls (current vs last snapshot) ask for reasons.
+    if (state.pendingUninstalls.isNotEmpty && !_uninstallSheetVisible) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || state.pendingUninstalls.isEmpty) return;
+        _uninstallSheetVisible = true;
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          builder: (_) => ChangeNotifierProvider<AppState>.value(
+            value: state,
+            child: UninstallReasonSheet(state: state),
+          ),
+        ).whenComplete(() => _uninstallSheetVisible = false);
       });
     }
 

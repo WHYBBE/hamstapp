@@ -7,6 +7,7 @@ import '../state/app_state.dart';
 import '../utils/format.dart';
 import '../widgets/app_icon.dart';
 import '../widgets/app_tile.dart';
+import '../widgets/uninstall_reason.dart';
 
 class BackupListsScreen extends StatelessWidget {
   const BackupListsScreen({super.key});
@@ -254,11 +255,25 @@ class BackupListDetailScreen extends StatelessWidget {
                   backgroundColor: Color(0x22FF0000),
                   child: Icon(Icons.help_outline, color: Colors.redAccent),
                 ),
-                title: Text(p, style: const TextStyle(fontSize: 14)),
+                title: Text(
+                  meta.lastKnownName.isEmpty ? p : meta.lastKnownName,
+                  style: const TextStyle(fontSize: 14),
+                ),
                 subtitle: Text(
-                  meta.reason.isNotEmpty ? '原因：${meta.reason}' : '该应用当前不在设备上',
+                  meta.uninstallReason.isNotEmpty
+                      ? '🗑️ ${meta.uninstallReason}\n$p'
+                      : (meta.reason.isNotEmpty
+                          ? '安装原因：${meta.reason}\n$p'
+                          : '$p\n该应用当前不在设备上，点击记录卸载原因'),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
+                ),
+                isThreeLine: true,
+                onTap: () => showUninstallReasonDialog(
+                  context,
+                  state,
+                  p,
+                  meta.lastKnownName.isEmpty ? p : meta.lastKnownName,
                 ),
                 trailing: IconButton(
                   icon: const Icon(Icons.remove_circle_outline),
