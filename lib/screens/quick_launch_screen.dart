@@ -37,6 +37,8 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
           child: TextField(
             onChanged: (v) => setState(() => _query = v),
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
+            onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             decoration: InputDecoration(
               hintText: '搜索任意应用并立即启动',
               prefixIcon: const Icon(Icons.search),
@@ -62,6 +64,7 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen> {
       return const Center(child: Text('没有找到匹配的应用'));
     }
     return ListView.builder(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       itemCount: results.length,
       itemBuilder: (context, i) {
         final app = results[i];
@@ -70,7 +73,10 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen> {
           title: Text(app.appName),
           subtitle: Text(app.packageName, maxLines: 1, overflow: TextOverflow.ellipsis),
           trailing: const Icon(Icons.rocket_launch_outlined),
-          onTap: () => launchApp(context, app.packageName),
+          onTap: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            launchApp(context, app.packageName);
+          },
         );
       },
     );

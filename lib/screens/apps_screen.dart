@@ -30,19 +30,24 @@ class AppsScreen extends StatelessWidget {
                     ? _EmptyView(state: state)
                     : ListView.builder(
                         physics: const AlwaysScrollableScrollPhysics(),
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
                         itemCount: apps.length,
                         itemBuilder: (context, i) {
                           final app = apps[i];
                           return AppListTile(
                             app: app,
                             state: state,
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => AppDetailScreen(
-                                    packageName: app.packageName),
-                              ),
-                            ),
+                            onTap: () {
+                              FocusManager.instance.primaryFocus?.unfocus();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => AppDetailScreen(
+                                      packageName: app.packageName),
+                                ),
+                              );
+                            },
                           );
                         },
                       ),
@@ -73,6 +78,7 @@ class _UninstalledList extends StatelessWidget {
     }
     return ListView.builder(
       physics: const AlwaysScrollableScrollPhysics(),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       itemCount: items.length,
       itemBuilder: (context, i) =>
           UninstalledTile(meta: items[i], state: state),
@@ -91,10 +97,12 @@ class _SearchBar extends StatefulWidget {
 class _SearchBarState extends State<_SearchBar> {
   late final TextEditingController _controller =
       TextEditingController(text: widget.state.query);
+  final FocusNode _focusNode = FocusNode();
 
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -107,7 +115,10 @@ class _SearchBarState extends State<_SearchBar> {
           Expanded(
             child: TextField(
               controller: _controller,
+              focusNode: _focusNode,
               textInputAction: TextInputAction.search,
+              onTapOutside: (_) => _focusNode.unfocus(),
+              onSubmitted: (_) => _focusNode.unfocus(),
               onChanged: (v) {
                 widget.state.query = v;
                 widget.state.refresh();
