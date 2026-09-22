@@ -1,0 +1,153 @@
+import 'package:flutter/material.dart';
+
+import '../models/app_info.dart';
+import '../models/category.dart';
+import '../state/app_state.dart';
+import '../utils/actions.dart';
+import '../utils/format.dart';
+import 'app_icon.dart';
+
+class AppListTile extends StatelessWidget {
+  const AppListTile({
+    super.key,
+    required this.app,
+    required this.state,
+    this.onTap,
+    this.trailing,
+    this.showCategories = true,
+  });
+
+  final AppInfo app;
+  final AppState state;
+  final VoidCallback? onTap;
+  final Widget? trailing;
+  final bool showCategories;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = state.metaFor(app.packageName);
+    final cats = state.categories
+        .where((c) => meta.categoryIds.contains(c.id))
+        .toList();
+
+    final subtitleParts = <String>[
+      if (app.versionName.isNotEmpty) 'v${app.versionName}',
+      if (app.isSystem) '系统',
+    ];
+
+    return ListTile(
+      onTap: onTap,
+      leading: AppIcon(
+        packageName: app.packageName,
+        label: app.appName,
+        size: 46,
+      ),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              app.appName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (meta.favorite)
+            const Padding(
+              padding: EdgeInsets.only(left: 4),
+              child: Icon(Icons.star_rounded, size: 16, color: Colors.amber),
+            ),
+        ],
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            subtitleParts.join(' · '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          if (meta.reason.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '💡 ${meta.reason}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+            ),
+          if (showCategories && cats.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: cats.map((c) => CategoryChip(category: c)).toList(),
+              ),
+            ),
+        ],
+      ),
+      trailing: trailing ?? _defaultTrailing(context),
+    );
+  }
+
+  Widget _defaultTrailing(BuildContext context) {
+    final meta = state.metaFor(app.packageName);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: meta.favorite ? '取消收藏' : '收藏',
+          icon: Icon(
+            meta.favorite ? Icons.star_rounded : Icons.star_border_rounded,
+            color: meta.favorite ? Colors.amber : Colors.grey,
+          ),
+          onPressed: () => state.updateMeta(app.packageName, favorite: !meta.favorite),
+        ),
+        IconButton(
+          tooltip: '启动',
+          icon: const Icon(Icons.rocket_launch_outlined, size: 20),
+          onPressed: () => launchApp(context, app.packageName),
+        ),
+      ],
+    );
+  }
+}
+
+class CategoryChip extends StatelessWidget {
+  const CategoryChip({super.key, required this.category, this.onDeleted});
+
+  final AppCategory category;
+  final VoidCallback? onDeleted;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Color(category.colorValue);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('${category.emoji} ${category.name}',
+              style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+          if (onDeleted != null) ...[
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: onDeleted,
+              child: Icon(Icons.close, size: 13, color: color),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+String installedSummary(AppInfo app) =>
+    '安装于 ${Fmt.day(app.firstInstallTime)} · 更新于 ${Fmt.relative(app.lastUpdateTime)}';
