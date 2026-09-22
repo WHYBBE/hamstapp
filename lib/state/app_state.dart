@@ -18,6 +18,7 @@ enum AppFilter {
   categorized,
   uncategorized,
   hasReason,
+  unorganized,
   uninstalled,
 }
 
@@ -427,6 +428,14 @@ class AppState extends ChangeNotifier {
           break;
         case AppFilter.hasReason:
           if (metaFor(app.packageName).reason.isEmpty) return false;
+          break;
+        case AppFilter.unorganized:
+          final m = metaFor(app.packageName);
+          if (m.categoryIds.isNotEmpty ||
+              m.reason.isNotEmpty ||
+              m.note.isNotEmpty) {
+            return false;
+          }
           break;
         case AppFilter.uninstalled:
           // Handled separately via [uninstalledApps].

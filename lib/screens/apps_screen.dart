@@ -189,6 +189,7 @@ class _FilterRow extends StatelessWidget {
     AppFilter.categorized: '已分类',
     AppFilter.uncategorized: '未分类',
     AppFilter.hasReason: '有原因',
+    AppFilter.unorganized: '🫥未整理',
     AppFilter.uninstalled: '🗑️已卸载',
   };
 
