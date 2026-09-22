@@ -183,8 +183,6 @@ class _FilterRow extends StatelessWidget {
 
   static const _labels = {
     AppFilter.all: '全部',
-    AppFilter.user: '用户',
-    AppFilter.system: '系统',
     AppFilter.favorite: '⭐收藏',
     AppFilter.categorized: '已分类',
     AppFilter.uncategorized: '未分类',
@@ -196,38 +194,131 @@ class _FilterRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 40,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 44,
+      child: Row(
         children: [
-          ..._labels.entries.map((e) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: FilterChip(
-                  label: Text(e.value),
-                  selected: state.filter == e.key,
-                  onSelected: (_) {
-                    state.filter = e.key;
-                    state.refresh();
-                  },
-                ),
-              )),
-          if (state.categories.isNotEmpty) ...[
-            const VerticalDivider(width: 12),
-            ...state.categories.map((c) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: FilterChip(
-                    label: Text('${c.emoji} ${c.name}'),
-                    selected: state.filterCategoryId == c.id,
-                    onSelected: (_) {
-                      state.filterCategoryId =
-                          state.filterCategoryId == c.id ? null : c.id;
-                      state.refresh();
-                    },
-                  ),
-                )),
-          ],
+          const SizedBox(width: 12),
+          _ScopeDropdown(state: state),
+          const SizedBox(width: 4),
+          Expanded(
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              children: [
+                ..._labels.entries.map((e) => Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: FilterChip(
+                        label: Text(e.value),
+                        selected: state.filter == e.key,
+                        onSelected: (_) {
+                          state.filter = e.key;
+                          state.refresh();
+                        },
+                      ),
+                    )),
+                if (state.categories.isNotEmpty) ...[
+                  const VerticalDivider(width: 12),
+                  ...state.categories.map((c) => Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: FilterChip(
+                          label: Text('${c.emoji} ${c.name}'),
+                          selected: state.filterCategoryId == c.id,
+                          onSelected: (_) {
+                            state.filterCategoryId =
+                                state.filterCategoryId == c.id ? null : c.id;
+                            state.refresh();
+                          },
+                        ),
+                      )),
+                ],
+              ],
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Collapsed combo box for the app-type scope (全部/用户/系统). Independent of
+/// the annotation filter radio group.
+class _ScopeDropdown extends StatelessWidget {
+  const _ScopeDropdown({required this.state});
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final (label, icon) = switch (state.scope) {
+      AppScope.all => ('全部', Icons.apps),
+      AppScope.user => ('用户', Icons.person_outline),
+      AppScope.system => ('系统', Icons.settings_outlined),
+    };
+    final active = state.scope != AppScope.all;
+    return PopupMenuButton<AppScope>(
+      tooltip: '应用类型',
+      initialValue: state.scope,
+      onSelected: (v) {
+        state.scope = v;
+        state.refresh();
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(
+          value: AppScope.all,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.apps),
+            title: Text('全部'),
+          ),
+        ),
+        PopupMenuItem(
+          value: AppScope.user,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.person_outline),
+            title: Text('用户'),
+          ),
+        ),
+        PopupMenuItem(
+          value: AppScope.system,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.settings_outlined),
+            title: Text('系统'),
+          ),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: active
+              ? scheme.primaryContainer
+              : scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 16,
+                color: active ? scheme.onPrimaryContainer : scheme.onSurfaceVariant),
+            const SizedBox(width: 4),
+            Text(label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color:
+                      active ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
+                )),
+            Icon(Icons.arrow_drop_down,
+                size: 18,
+                color:
+                    active ? scheme.onPrimaryContainer : scheme.onSurfaceVariant),
+          ],
+        ),
       ),
     );
   }

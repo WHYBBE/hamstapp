@@ -10,10 +10,12 @@ import '../models/snapshot.dart';
 import '../services/native_apps.dart';
 import '../services/storage.dart';
 
+/// Which apps are in scope by type. Kept separate from [AppFilter] so it does
+/// not take part in the annotation filter radio group.
+enum AppScope { all, user, system }
+
 enum AppFilter {
   all,
-  user,
-  system,
   favorite,
   categorized,
   uncategorized,
@@ -47,6 +49,7 @@ class AppState extends ChangeNotifier {
   bool includeSystemInScan = true;
 
   String query = '';
+  AppScope scope = AppScope.all;
   AppFilter filter = AppFilter.all;
   AppSort sort = AppSort.name;
   String? filterCategoryId;
@@ -502,13 +505,17 @@ class AppState extends ChangeNotifier {
   List<AppInfo> get visibleApps {
     final q = query.trim().toLowerCase();
     var list = apps.where((app) {
-      switch (filter) {
-        case AppFilter.user:
+      switch (scope) {
+        case AppScope.user:
           if (app.isSystem) return false;
           break;
-        case AppFilter.system:
+        case AppScope.system:
           if (!app.isSystem) return false;
           break;
+        case AppScope.all:
+          break;
+      }
+      switch (filter) {
         case AppFilter.favorite:
           if (!metaFor(app.packageName).favorite) return false;
           break;
