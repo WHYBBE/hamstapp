@@ -59,7 +59,9 @@ class SnapshotsScreen extends StatelessWidget {
                         title: Text(s.name,
                             style: const TextStyle(fontWeight: FontWeight.w600)),
                         subtitle: Text(
-                            '${s.entries.length} 个应用 · ${Fmt.dateTime(s.createdAt)}'
+                            '已安装 ${s.installedCount}'
+                            '${s.uninstalledCount > 0 ? ' · 已卸载 ${s.uninstalledCount}' : ''}'
+                            ' · ${Fmt.dateTime(s.createdAt)}'
                             '${s.note.isNotEmpty ? '\n${s.note}' : ''}'),
                         isThreeLine: s.note.isNotEmpty,
                         trailing: PopupMenuButton<String>(
@@ -69,6 +71,8 @@ class SnapshotsScreen extends StatelessWidget {
                                 value: 'current', child: Text('与「当前」对比')),
                             PopupMenuItem(
                                 value: 'other', child: Text('与其它快照对比')),
+                            PopupMenuItem(
+                                value: 'restore', child: Text('恢复标注数据')),
                             PopupMenuItem(value: 'rename', child: Text('重命名')),
                             PopupMenuItem(value: 'delete', child: Text('删除')),
                           ],
@@ -210,6 +214,33 @@ class SnapshotsScreen extends StatelessWidget {
           ),
         );
         if (ok == true) await state.deleteSnapshot(s.id);
+        break;
+      case 'restore':
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('恢复标注数据'),
+            content: Text(
+              '将用「${s.name}」中记录的安装原因、备注、分类、收藏及卸载记录'
+              '覆盖当前对应应用的标注数据。\n\n'
+              '此操作只恢复数据，不会安装或卸载任何应用。',
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('取消')),
+              FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('恢复')),
+            ],
+          ),
+        );
+        if (ok != true) return;
+        final count = await state.restoreSnapshot(s.id);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已恢复 $count 条应用的标注数据')),
+        );
         break;
     }
   }

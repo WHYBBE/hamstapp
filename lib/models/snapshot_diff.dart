@@ -38,8 +38,16 @@ class SnapshotDiff {
   int get changedCount => added.length + removed.length + updated.length;
 
   static SnapshotDiff between(Snapshot older, Snapshot newer) {
-    final oldMap = {for (final e in older.entries) e.packageName: e};
-    final newMap = {for (final e in newer.entries) e.packageName: e};
+    // Presence comparison is based on installed entries only: an app that is
+    // recorded as uninstalled in a snapshot is treated as absent.
+    final oldMap = {
+      for (final e in older.entries)
+        if (e.isInstalled) e.packageName: e,
+    };
+    final newMap = {
+      for (final e in newer.entries)
+        if (e.isInstalled) e.packageName: e,
+    };
 
     final added = <DiffItem>[];
     final removed = <DiffItem>[];

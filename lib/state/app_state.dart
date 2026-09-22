@@ -304,23 +304,67 @@ class AppState extends ChangeNotifier {
   // ---------------------------------------------------------------- snapshots
 
   Future<Snapshot> createSnapshot(String name, {String note = ''}) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final entries = <SnapshotEntry>[];
+    final seen = <String>{};
+
+    // Currently installed apps, together with their annotations.
+    for (final a in apps) {
+      final m = metaFor(a.packageName);
+      seen.add(a.packageName);
+      entries.add(SnapshotEntry(
+        packageName: a.packageName,
+        appName: a.appName,
+        versionName: a.versionName,
+        versionCode: a.versionCode,
+        lastUpdateTime: a.lastUpdateTime,
+        firstInstallTime: a.firstInstallTime,
+        isSystem: a.isSystem,
+        sizeBytes: a.sizeBytes,
+        reason: m.reason,
+        note: m.note,
+        categoryIds: List<String>.from(m.categoryIds),
+        favorite: m.favorite,
+        pinned: m.pinned,
+      ));
+    }
+
+    // Apps we've seen before that are currently uninstalled: keep their
+    // uninstall record (including the reason) so the next snapshot can
+    // restore it.
+    for (final m in meta.values) {
+      if (!m.isUninstalled || seen.contains(m.packageName)) continue;
+      entries.add(SnapshotEntry(
+        packageName: m.packageName,
+        appName: m.lastKnownName.isEmpty ? m.packageName : m.lastKnownName,
+        versionName: '',
+        versionCode: 0,
+        lastUpdateTime: 0,
+        firstInstallTime: 0,
+        isSystem: false,
+        sizeBytes: 0,
+        reason: m.reason,
+        note: m.note,
+        categoryIds: List<String>.from(m.categoryIds),
+        favorite: m.favorite,
+        pinned: m.pinned,
+        uninstallReason: m.uninstallReason,
+        uninstalledAt: m.uninstalledAt,
+      ));
+    }
+
     final snapshot = Snapshot(
       id: _newId(),
-      name: name.isEmpty
-          ? '快照 ${snapshots.length + 1}'
-          : name,
-      createdAt: DateTime.now().millisecondsSinceEpoch,
+      name: name.isEmpty ? '快照 ${snapshots.length + 1}' : name,
+      createdAt: now,
       note: note,
-      entries: apps
-          .map((a) => SnapshotEntry(
-                packageName: a.packageName,
-                appName: a.appName,
-                versionName: a.versionName,
-                versionCode: a.versionCode,
-                lastUpdateTime: a.lastUpdateTime,
-                firstInstallTime: a.firstInstallTime,
-                isSystem: a.isSystem,
-                sizeBytes: a.sizeBytes,
+      entries: entries,
+      categories: categories
+          .map((c) => AppCategory(
+                id: c.id,
+                name: c.name,
+                colorValue: c.colorValue,
+                emoji: c.emoji,
               ))
           .toList(),
     );
@@ -328,6 +372,54 @@ class AppState extends ChangeNotifier {
     await _persistSnapshots();
     notifyListeners();
     return snapshot;
+  }
+
+  /// Restore the app annotations (reason, note, categories, favorite) and
+  /// uninstall records stored in [snapshot]. Categories referenced by the
+  /// snapshot are recreated if missing. Returns the number of apps updated.
+  Future<int> restoreSnapshot(String snapshotId) async {
+    final snapshot = snapshots.firstWhere((s) => s.id == snapshotId);
+
+    // Recreate categories that no longer exist.
+    final existingCatIds = categories.map((c) => c.id).toSet();
+    for (final c in snapshot.categories) {
+      if (existingCatIds.contains(c.id)) continue;
+      categories.add(AppCategory(
+        id: c.id,
+        name: c.name,
+        colorValue: c.colorValue,
+        emoji: c.emoji,
+      ));
+      existingCatIds.add(c.id);
+    }
+
+    final installed = {for (final a in apps) a.packageName};
+
+    for (final e in snapshot.entries) {
+      final m = metaFor(e.packageName);
+      m.reason = e.reason;
+      m.note = e.note;
+      m.favorite = e.favorite;
+      m.pinned = e.pinned;
+      m.categoryIds =
+          e.categoryIds.where(existingCatIds.contains).toList(growable: true);
+      if (e.appName.isNotEmpty) m.lastKnownName = e.appName;
+
+      if (e.uninstalledAt != 0 && !installed.contains(e.packageName)) {
+        // Keep it as an uninstall record with its reason.
+        m.uninstallReason = e.uninstallReason;
+        m.uninstalledAt = e.uninstalledAt;
+      } else {
+        // Installed (or reinstalled) now -> clear the uninstall record.
+        m.uninstallReason = '';
+        m.uninstalledAt = 0;
+      }
+    }
+
+    await _persistCategories();
+    await _persistMeta();
+    notifyListeners();
+    return snapshot.entries.length;
   }
 
   Future<void> deleteSnapshot(String id) async {
