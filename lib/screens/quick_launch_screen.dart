@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app_info.dart';
@@ -36,23 +37,36 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    final editing = state.tileEditMode && _tabs.index == 0;
+
+    final tabBar = TabBar(
+      controller: _tabs,
+      tabs: const [
+        Tab(icon: Icon(Icons.grid_view_rounded, size: 20), text: '磁贴'),
+        Tab(icon: Icon(Icons.category_outlined, size: 20), text: '分类'),
+        Tab(icon: Icon(Icons.star_outline, size: 20), text: '收藏'),
+        Tab(icon: Icon(Icons.history, size: 20), text: '最近'),
+      ],
+    );
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: const Text('快速启动', style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: _actions(context, state),
-        bottom: TabBar(
-          controller: _tabs,
-          tabs: const [
-            Tab(icon: Icon(Icons.grid_view_rounded, size: 20), text: '磁贴'),
-            Tab(icon: Icon(Icons.category_outlined, size: 20), text: '分类'),
-            Tab(icon: Icon(Icons.star_outline, size: 20), text: '收藏'),
-            Tab(icon: Icon(Icons.history, size: 20), text: '最近'),
-          ],
-        ),
+        title: Text(editing ? '编辑磁贴' : '快速启动',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        actions: _actions(context, state, editing),
+        bottom: editing
+            ? PreferredSize(
+                preferredSize: tabBar.preferredSize,
+                child: AbsorbPointer(child: tabBar),
+              )
+            : tabBar,
       ),
       body: TabBarView(
         controller: _tabs,
+        physics: editing
+            ? const NeverScrollableScrollPhysics()
+            : const PageScrollPhysics(),
         children: [
           _TilesTab(state: state),
           CategoriesTab(state: state),
@@ -63,10 +77,34 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
     );
   }
 
-  List<Widget> _actions(BuildContext context, AppState state) {
+  List<Widget> _actions(BuildContext context, AppState state, bool editing) {
+    if (_tabs.index == 0 && editing) {
+      return [
+        TextButton.icon(
+          onPressed: () => state.setTileEditMode(false),
+          icon: const Icon(Icons.check, size: 18),
+          label: const Text('完成'),
+        ),
+        const SizedBox(width: 4),
+      ];
+    }
     switch (_tabs.index) {
       case 0:
         return [
+          IconButton(
+            tooltip: '编辑磁贴（拖动/缩放）',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () {
+              final pages = state.tilePages;
+              if (pages.isEmpty || state.pinsOnPage(pages[state.currentTilePageIndex.clamp(0, pages.length - 1)]).isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('当前磁贴页还没有应用，先点击 ➕ 置顶')),
+                );
+                return;
+              }
+              state.setTileEditMode(true);
+            },
+          ),
           IconButton(
             tooltip: '置顶应用到磁贴',
             icon: const Icon(Icons.add),
@@ -136,44 +174,53 @@ class _TilesTabState extends State<_TilesTab> {
         Expanded(
           child: PageView.builder(
             controller: _controller,
+            physics: state.tileEditMode
+                ? const NeverScrollableScrollPhysics()
+                : const PageScrollPhysics(),
             itemCount: pages.length,
             onPageChanged: _setIndex,
             itemBuilder: (context, i) =>
                 _TileBoard(state: state, page: pages[i]),
           ),
         ),
-        _PageBar(
-          state: state,
-          currentIndex: _index,
-          onSelect: (i) {
-            _setIndex(i);
-            _controller.animateToPage(
-              i,
-              duration: const Duration(milliseconds: 240),
-              curve: Curves.easeOut,
-            );
-          },
-          onAdd: () async {
-            final page = await _promptAddPage(context, state);
-            if (page == null) return;
-            final idx = state.tilePages.indexWhere((p) => p.id == page.id);
-            if (idx < 0) return;
-            _setIndex(idx);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_controller.hasClients) _controller.jumpToPage(idx);
-            });
-          },
-          onChanged: () {
-            final idx = state.currentTilePageIndex
-                .clamp(0, state.tilePages.isEmpty ? 0 : state.tilePages.length - 1);
-            setState(() => _index = idx);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_controller.hasClients &&
-                  (_controller.page?.round() ?? 0) != idx) {
-                _controller.jumpToPage(idx);
-              }
-            });
-          },
+        Opacity(
+          opacity: state.tileEditMode ? 0.45 : 1,
+          child: AbsorbPointer(
+            absorbing: state.tileEditMode,
+            child: _PageBar(
+              state: state,
+              currentIndex: _index,
+              onSelect: (i) {
+                _setIndex(i);
+                _controller.animateToPage(
+                  i,
+                  duration: const Duration(milliseconds: 240),
+                  curve: Curves.easeOut,
+                );
+              },
+              onAdd: () async {
+                final page = await _promptAddPage(context, state);
+                if (page == null) return;
+                final idx = state.tilePages.indexWhere((p) => p.id == page.id);
+                if (idx < 0) return;
+                _setIndex(idx);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_controller.hasClients) _controller.jumpToPage(idx);
+                });
+              },
+              onChanged: () {
+                final idx = state.currentTilePageIndex.clamp(
+                    0, state.tilePages.isEmpty ? 0 : state.tilePages.length - 1);
+                setState(() => _index = idx);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_controller.hasClients &&
+                      (_controller.page?.round() ?? 0) != idx) {
+                    _controller.jumpToPage(idx);
+                  }
+                });
+              },
+            ),
+          ),
         ),
       ],
     );
@@ -201,10 +248,58 @@ class _TileBoardState extends State<_TileBoard> {
   int _resizeW = 1;
   int _resizeH = 1;
 
+  // Drag-to-move state with live target-cell highlight.
+  String? _dragId;
+  int _dragW = 1;
+  int _dragH = 1;
+  int _dragCol = 0;
+  int _dragRow = 0;
+  double _cellW = 60;
+
+  void _startDrag(String pkg) {
+    final m = widget.state.metaFor(pkg);
+    setState(() {
+      _dragId = pkg;
+      _dragW = m.tileW;
+      _dragH = m.tileH;
+      _dragCol = m.tileCol < 0 ? 0 : m.tileCol;
+      _dragRow = m.tileRow < 0 ? 0 : m.tileRow;
+    });
+  }
+
+  void _updateDrag(String pkg, Offset globalPosition) {
+    final box = _boardKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final local = box.globalToLocal(globalPosition);
+    final unit = _cellW + _gap;
+    final col = ((local.dx - _pad) / unit)
+        .round()
+        .clamp(0, kTileCols - _dragW);
+    final row = ((local.dy - _pad) / unit).round();
+    if (row < 0) return;
+    if (col != _dragCol || row != _dragRow) {
+      setState(() {
+        _dragCol = col;
+        _dragRow = row;
+      });
+    }
+  }
+
+  void _endDrag(String pkg) {
+    widget.state.moveTile(pkg, _dragCol, _dragRow);
+    setState(() => _dragId = null);
+  }
+
+  void _cancelDrag() {
+    if (_dragId == null) return;
+    setState(() => _dragId = null);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
     final page = widget.page;
+    final editable = state.tileEditMode;
     final pins = state.pinsOnPage(page);
     if (pins.isEmpty) {
       return _hint(
@@ -214,9 +309,10 @@ class _TileBoardState extends State<_TileBoard> {
       );
     }
 
-    return LayoutBuilder(builder: (context, constraints) {
+    final board = LayoutBuilder(builder: (context, constraints) {
       final cellW =
           (constraints.maxWidth - _pad * 2 - _gap * (kTileCols - 1)) / kTileCols;
+      _cellW = cellW;
       final specs = pins.map((a) {
         final m = state.metaFor(a.packageName);
         final resizing = a.packageName == _resizeId;
@@ -245,6 +341,25 @@ class _TileBoardState extends State<_TileBoard> {
           width: double.infinity,
           child: Stack(
             children: [
+              if (editable && _dragId != null)
+                Positioned(
+                  left: x(_dragCol),
+                  top: y(_dragRow),
+                  width: w(_dragW),
+                  height: h(_dragH),
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               for (final app in pins)
                 Builder(builder: (context) {
                   final p = layout.placements[app.packageName]!;
@@ -257,15 +372,17 @@ class _TileBoardState extends State<_TileBoard> {
                       app: app,
                       state: state,
                       page: page,
-                      boardKey: _boardKey,
                       cellW: cellW,
                       gap: _gap,
-                      pad: _pad,
-                      editable: !page.locked,
+                      editable: editable,
+                      onDragStart: () => _startDrag(app.packageName),
+                      onDragUpdate: (pos) => _updateDrag(app.packageName, pos),
+                      onDragEnd: () => _endDrag(app.packageName),
+                      onDragCancel: _cancelDrag,
                     ),
                   );
                 }),
-              if (!page.locked)
+              if (editable)
                 for (final app in pins)
                   Builder(builder: (context) {
                     final p = layout.placements[app.packageName]!;
@@ -296,6 +413,48 @@ class _TileBoardState extends State<_TileBoard> {
         ),
       );
     });
+
+    if (!editable) return board;
+    return Column(
+      children: [
+        _EditBanner(
+          onDone: () => state.setTileEditMode(false),
+        ),
+        Expanded(child: board),
+      ],
+    );
+  }
+}
+
+class _EditBanner extends StatelessWidget {
+  const _EditBanner({required this.onDone});
+
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      color: scheme.primaryContainer,
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+      child: Row(
+        children: [
+          Icon(Icons.edit, size: 18, color: scheme.onPrimaryContainer),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '编辑模式：长按拖动移动，右下角拖动缩放',
+              style: TextStyle(fontSize: 12.5, color: scheme.onPrimaryContainer),
+            ),
+          ),
+          TextButton(
+            onPressed: onDone,
+            child: const Text('完成'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -505,13 +664,6 @@ class _PageBar extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (page.locked)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: Icon(Icons.lock,
-                                  size: 12,
-                                  color: fg.withValues(alpha: 0.8)),
-                            ),
                           Text(
                             page.name,
                             style: TextStyle(
@@ -627,16 +779,6 @@ void _pageMenu(
           ),
           const Divider(height: 1),
           ListTile(
-            leading: Icon(page.locked ? Icons.lock_open : Icons.lock_outline),
-            title: Text(page.locked ? '解锁布局（编辑模式）' : '锁定布局（锁定模式）'),
-            subtitle: Text('当前：${page.locked ? '锁定模式' : '编辑模式'}'),
-            onTap: () async {
-              Navigator.pop(ctx);
-              await state.setTilePageLocked(page.id, !page.locked);
-              onChanged();
-            },
-          ),
-          ListTile(
             leading: const Icon(Icons.drive_file_rename_outline),
             title: const Text('重命名页面'),
             onTap: () async {
@@ -686,21 +828,25 @@ class _Tile extends StatelessWidget {
     required this.app,
     required this.state,
     required this.page,
-    required this.boardKey,
     required this.cellW,
     required this.gap,
-    required this.pad,
     required this.editable,
+    required this.onDragStart,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+    required this.onDragCancel,
   });
 
   final AppInfo app;
   final AppState state;
   final TilePage page;
-  final GlobalKey boardKey;
   final double cellW;
   final double gap;
-  final double pad;
   final bool editable;
+  final VoidCallback onDragStart;
+  final void Function(Offset globalPosition) onDragUpdate;
+  final VoidCallback onDragEnd;
+  final VoidCallback onDragCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -711,27 +857,36 @@ class _Tile extends StatelessWidget {
     final iconSize = (shortest * 0.42).clamp(24.0, 96.0);
     final fontScale = (shortest / 56).clamp(0.85, 1.9);
 
-    final content = _content(context, iconSize, fontScale);
+    final content = _content(context, iconSize, fontScale, editable);
 
     if (!editable) return content;
 
     return LongPressDraggable<String>(
       data: app.packageName,
+      delay: const Duration(milliseconds: 180),
+      dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: _feedback(width, height, content),
-      childWhenDragging: Opacity(opacity: 0.25, child: content),
-      onDragEnd: (details) => _onDrop(details),
+      childWhenDragging: Opacity(opacity: 0.3, child: content),
+      onDragStarted: () {
+        HapticFeedback.selectionClick();
+        onDragStart();
+      },
+      onDragUpdate: (d) => onDragUpdate(d.globalPosition),
+      onDragEnd: (d) => onDragEnd(),
+      onDraggableCanceled: (v, o) => onDragCancel(),
       child: content,
     );
   }
 
-  Widget _content(BuildContext context, double iconSize, double fontScale) {
+  Widget _content(
+      BuildContext context, double iconSize, double fontScale, bool editable) {
     final color = _tileColor(app.appName);
     final tappable = Material(
       color: color,
       borderRadius: BorderRadius.circular(10),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => launchApp(context, app.packageName),
+        onTap: editable ? null : () => launchApp(context, app.packageName),
         child: Stack(
           children: [
             Positioned(
@@ -763,6 +918,27 @@ class _Tile extends StatelessWidget {
         ),
       ),
     );
+    if (editable) {
+      return Stack(
+        children: [
+          Positioned.fill(child: tappable),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    width: 1.5,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     return Stack(
       children: [
         Positioned.fill(child: tappable),
@@ -786,21 +962,19 @@ class _Tile extends StatelessWidget {
     return SizedBox(
       width: width,
       height: height,
-      child: Opacity(opacity: 0.85, child: child),
+      child: Transform.scale(
+        scale: 1.04,
+        child: Material(
+          color: Colors.transparent,
+          elevation: 8,
+          borderRadius: BorderRadius.circular(10),
+          child: Opacity(opacity: 0.92, child: child),
+        ),
+      ),
     );
   }
 
-  void _onDrop(DraggableDetails details) {
-    final box = boardKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null) return;
-    final local = box.globalToLocal(details.offset);
-    final col = ((local.dx - pad) / (cellW + gap)).round();
-    final row = ((local.dy - pad) / (cellW + gap)).round();
-    state.moveTile(app.packageName, col, row);
-  }
-
   void _showTileMenu(BuildContext context) {
-    final meta = state.metaFor(app.packageName);
     showModalBottomSheet(
       context: context,
       builder: (ctx) => SafeArea(
@@ -814,26 +988,6 @@ class _Tile extends StatelessWidget {
                 onTap: () {
                   Navigator.pop(ctx);
                   launchApp(context, app.packageName);
-                },
-              ),
-              if (editable)
-                ListTile(
-                  leading: const Icon(Icons.aspect_ratio),
-                  title: const Text('调整尺寸'),
-                  subtitle:
-                      Text('当前 ${meta.tileW} × ${meta.tileH}（一行 $kTileCols 格）'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _showSizePicker(context);
-                  },
-                ),
-              ListTile(
-                leading: Icon(page.locked ? Icons.lock_open : Icons.lock_outline),
-                title: Text(page.locked ? '解锁布局（可编辑）' : '锁定布局'),
-                subtitle: Text('当前：${page.locked ? '锁定模式' : '编辑模式'}'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  state.setTilePageLocked(page.id, !page.locked);
                 },
               ),
               ListTile(
@@ -871,82 +1025,6 @@ class _Tile extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-
-  Future<void> _showSizePicker(BuildContext context) async {
-    final meta = state.metaFor(app.packageName);
-    var w = meta.tileW;
-    var h = meta.tileH;
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('调整磁贴尺寸'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _stepper(
-                label: '宽',
-                value: w,
-                min: 1,
-                max: kTileCols,
-                onChanged: (v) => setLocal(() => w = v),
-              ),
-              const SizedBox(height: 8),
-              _stepper(
-                label: '高',
-                value: h,
-                min: 1,
-                max: kTileMaxH,
-                onChanged: (v) => setLocal(() => h = v),
-              ),
-              const SizedBox(height: 12),
-              Text('1 行 = $kTileCols 格，例如 2×2、1×3、4×4',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-            ],
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-            FilledButton(
-              onPressed: () {
-                state.setTileSize(app.packageName, w, h);
-                Navigator.pop(ctx);
-              },
-              child: const Text('确定'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _stepper({
-    required String label,
-    required int value,
-    required int min,
-    required int max,
-    required ValueChanged<int> onChanged,
-  }) {
-    return Row(
-      children: [
-        SizedBox(width: 32, child: Text(label)),
-        IconButton(
-          icon: const Icon(Icons.remove_circle_outline),
-          onPressed: value > min ? () => onChanged(value - 1) : null,
-        ),
-        SizedBox(
-          width: 28,
-          child: Text('$value',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-        ),
-        IconButton(
-          icon: const Icon(Icons.add_circle_outline),
-          onPressed: value < max ? () => onChanged(value + 1) : null,
-        ),
-      ],
     );
   }
 

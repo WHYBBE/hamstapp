@@ -664,11 +664,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Lock/unlock a tile page. A locked page cannot be rearranged.
-  Future<void> setTilePageLocked(String id, bool locked) async {
-    final page = tilePages.firstWhere((p) => p.id == id);
-    page.locked = locked;
-    await _persistTilePages();
+  /// Transient, board-wide edit mode. While on, tiles can be moved/resized and
+  /// navigation is blocked until the user finishes editing.
+  bool tileEditMode = false;
+
+  void setTileEditMode(bool value) {
+    if (tileEditMode == value) return;
+    tileEditMode = value;
     notifyListeners();
   }
 

@@ -54,7 +54,17 @@ class _HomeScreenState extends State<HomeScreen> {
       body: IndexedStack(index: _index, children: screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: (i) {
+          if (state.tileEditMode) {
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                const SnackBar(content: Text('请先点击右上角「完成」结束磁贴编辑')),
+              );
+            return;
+          }
+          setState(() => _index = i);
+        },
         destinations: const [
           NavigationDestination(
               icon: Icon(Icons.home_outlined),
