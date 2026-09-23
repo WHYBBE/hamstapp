@@ -23,6 +23,12 @@ class AppMeta {
   /// Which tile page this pinned app lives on ('' = default/first page).
   String tilePageId;
 
+  /// Tile position/size on the 6-column board. col/row of -1 means auto.
+  int tileCol;
+  int tileRow;
+  int tileW;
+  int tileH;
+
   AppMeta({
     required this.packageName,
     this.reason = '',
@@ -36,6 +42,10 @@ class AppMeta {
     this.uninstalledAt = 0,
     this.lastLaunchedAt = 0,
     this.tilePageId = '',
+    this.tileCol = -1,
+    this.tileRow = -1,
+    this.tileW = 1,
+    this.tileH = 1,
   })  : categoryIds = categoryIds ?? <String>[],
         firstSeenAt =
             firstSeenAt ?? DateTime.now().millisecondsSinceEpoch;
@@ -53,6 +63,10 @@ class AppMeta {
         uninstalledAt: map['uninstalledAt'] as int? ?? 0,
         lastLaunchedAt: map['lastLaunchedAt'] as int? ?? 0,
         tilePageId: map['tilePageId'] as String? ?? '',
+        tileCol: map['tileCol'] as int? ?? -1,
+        tileRow: map['tileRow'] as int? ?? -1,
+        tileW: map['tileW'] as int? ?? 1,
+        tileH: map['tileH'] as int? ?? 1,
       );
 
   Map<String, dynamic> toMap() => {
@@ -68,6 +82,10 @@ class AppMeta {
         'uninstalledAt': uninstalledAt,
         'lastLaunchedAt': lastLaunchedAt,
         'tilePageId': tilePageId,
+        'tileCol': tileCol,
+        'tileRow': tileRow,
+        'tileW': tileW,
+        'tileH': tileH,
       };
 
   bool get isUninstalled => uninstalledAt != 0;

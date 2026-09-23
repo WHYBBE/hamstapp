@@ -11,6 +11,7 @@ import '../models/tile_page.dart';
 import '../services/native_apps.dart';
 import '../services/storage.dart';
 import '../utils/format.dart';
+import '../utils/tile_layout.dart';
 
 /// Which apps are in scope by type. Kept separate from [AppFilter] so it does
 /// not take part in the annotation filter radio group.
@@ -27,6 +28,8 @@ enum AppFilter {
 }
 
 enum AppSort { name, installTime, updateTime, size }
+
+enum TileSort { name, recent, installTime, updateTime }
 
 class AppState extends ChangeNotifier {
   final Storage storage;
@@ -583,6 +586,132 @@ class AppState extends ChangeNotifier {
   Future<void> assignPinToPage(String packageName, String pageId) async {
     final m = metaFor(packageName);
     m.tilePageId = pageId;
+    await _persistMeta();
+    notifyListeners();
+  }
+
+  /// Currently visible tile page (transient, not persisted).
+  int currentTilePageIndex = 0;
+
+  void setCurrentTilePage(int i) {
+    if (i == currentTilePageIndex) return;
+    currentTilePageIndex = i;
+    notifyListeners();
+  }
+
+  TilePage _pageForPin(String packageName) {
+    if (tilePages.isEmpty) {
+      return TilePage(id: '', name: '页面 1', createdAt: 0);
+    }
+    final pid = metaFor(packageName).tilePageId;
+    return tilePages.firstWhere(
+      (p) => p.id == pid,
+      orElse: () => tilePages.first,
+    );
+  }
+
+  List<TileSpec> _specsForPage(TilePage page, {String? exclude}) {
+    final specs = <TileSpec>[];
+    for (final a in pinsOnPage(page)) {
+      if (a.packageName == exclude) continue;
+      final m = metaFor(a.packageName);
+      specs.add(TileSpec(
+        id: a.packageName,
+        w: m.tileW,
+        h: m.tileH,
+        col: m.tileCol,
+        row: m.tileRow,
+      ));
+    }
+    return specs;
+  }
+
+  /// Move a tile to the given grid cell (finds the nearest free spot on
+  /// collision).
+  Future<void> moveTile(String packageName, int col, int row) async {
+    final m = metaFor(packageName);
+    final page = _pageForPin(packageName);
+    final others = _specsForPage(page, exclude: packageName);
+    final p = resolveMove(
+        others, packageName, col, row, m.tileW, m.tileH);
+    m.tileCol = p.col;
+    m.tileRow = p.row;
+    await _persistMeta();
+    notifyListeners();
+  }
+
+  /// Change a tile's size (width 1..6, height 1..6), relocating if needed.
+  Future<void> setTileSize(String packageName, int w, int h) async {
+    final cw = w.clamp(1, kTileCols);
+    final ch = h.clamp(1, kTileMaxH);
+    final m = metaFor(packageName);
+    final page = _pageForPin(packageName);
+    final others = _specsForPage(page, exclude: packageName);
+    final p = resolveMove(
+      others,
+      packageName,
+      m.tileCol < 0 ? 0 : m.tileCol,
+      m.tileRow < 0 ? 0 : m.tileRow,
+      cw,
+      ch,
+    );
+    m.tileW = cw;
+    m.tileH = ch;
+    m.tileCol = p.col;
+    m.tileRow = p.row;
+    await _persistMeta();
+    notifyListeners();
+  }
+
+  /// Re-flow a page's tiles in [sort] order and persist the new positions.
+  Future<void> applyTileSort(String pageId, TileSort sort) async {
+    final page = tilePages.firstWhere((p) => p.id == pageId);
+    final list = pinsOnPage(page);
+    switch (sort) {
+      case TileSort.name:
+        list.sort((a, b) =>
+            a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
+        break;
+      case TileSort.recent:
+        list.sort((a, b) => metaFor(b.packageName)
+            .lastLaunchedAt
+            .compareTo(metaFor(a.packageName).lastLaunchedAt));
+        break;
+      case TileSort.installTime:
+        list.sort((a, b) => b.firstInstallTime.compareTo(a.firstInstallTime));
+        break;
+      case TileSort.updateTime:
+        list.sort((a, b) => b.lastUpdateTime.compareTo(a.lastUpdateTime));
+        break;
+    }
+
+    final specs = list.map((a) {
+      final m = metaFor(a.packageName);
+      return TileSpec(id: a.packageName, w: m.tileW, h: m.tileH);
+    }).toList();
+
+    final layout = resolveTileLayout(specs, ignoreStored: true);
+    for (final a in list) {
+      final m = metaFor(a.packageName);
+      final p = layout.placements[a.packageName];
+      if (p != null) {
+        m.tileCol = p.col;
+        m.tileRow = p.row;
+      }
+      if (m.tilePageId.isEmpty) m.tilePageId = page.id;
+    }
+    await _persistMeta();
+    notifyListeners();
+  }
+
+  /// Forget custom positions on a page; tiles auto-pack.
+  Future<void> resetTileLayout(String pageId) async {
+    final page = tilePages.firstWhere((p) => p.id == pageId);
+    for (final a in pinsOnPage(page)) {
+      final m = metaFor(a.packageName);
+      m.tileCol = -1;
+      m.tileRow = -1;
+    }
     await _persistMeta();
     notifyListeners();
   }

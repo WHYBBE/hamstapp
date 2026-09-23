@@ -6,6 +6,7 @@ import '../models/tile_page.dart';
 import '../state/app_state.dart';
 import '../utils/actions.dart';
 import '../utils/format.dart';
+import '../utils/tile_layout.dart';
 import '../widgets/app_icon.dart';
 import '../widgets/category_editor.dart';
 import 'app_detail_screen.dart';
@@ -65,6 +66,30 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
     switch (_tabs.index) {
       case 0:
         return [
+          PopupMenuButton<String>(
+            tooltip: '排序磁贴',
+            icon: const Icon(Icons.sort),
+            onSelected: (v) {
+              final pages = state.tilePages;
+              if (pages.isEmpty) return;
+              final idx =
+                  state.currentTilePageIndex.clamp(0, pages.length - 1);
+              final pageId = pages[idx].id;
+              if (v == 'reset') {
+                state.resetTileLayout(pageId);
+              } else {
+                state.applyTileSort(pageId, _tileSortFrom(v));
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'name', child: Text('按名称')),
+              PopupMenuItem(value: 'recent', child: Text('按最近使用')),
+              PopupMenuItem(value: 'install', child: Text('按安装时间')),
+              PopupMenuItem(value: 'update', child: Text('按更新时间')),
+              PopupMenuDivider(),
+              PopupMenuItem(value: 'reset', child: Text('重置布局')),
+            ],
+          ),
           IconButton(
             tooltip: '置顶应用到磁贴',
             icon: const Icon(Icons.add),
@@ -85,6 +110,19 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
   }
 }
 
+TileSort _tileSortFrom(String v) {
+  switch (v) {
+    case 'recent':
+      return TileSort.recent;
+    case 'install':
+      return TileSort.installTime;
+    case 'update':
+      return TileSort.updateTime;
+    default:
+      return TileSort.name;
+  }
+}
+
 // ---------------------------------------------------------------- 磁贴
 
 class _TilesTab extends StatefulWidget {
@@ -100,9 +138,20 @@ class _TilesTabState extends State<_TilesTab> {
   int _index = 0;
 
   @override
+  void initState() {
+    super.initState();
+    _index = widget.state.currentTilePageIndex;
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  void _setIndex(int i) {
+    setState(() => _index = i);
+    widget.state.setCurrentTilePage(i);
   }
 
   @override
@@ -124,16 +173,16 @@ class _TilesTabState extends State<_TilesTab> {
           child: PageView.builder(
             controller: _controller,
             itemCount: pages.length,
-            onPageChanged: (i) => setState(() => _index = i),
+            onPageChanged: _setIndex,
             itemBuilder: (context, i) =>
-                _PageGrid(state: state, page: pages[i]),
+                _TileBoard(state: state, page: pages[i]),
           ),
         ),
         _PageBar(
           state: state,
           currentIndex: _index,
           onSelect: (i) {
-            setState(() => _index = i);
+            _setIndex(i);
             _controller.animateToPage(
               i,
               duration: const Duration(milliseconds: 240),
@@ -145,7 +194,7 @@ class _TilesTabState extends State<_TilesTab> {
             if (page == null) return;
             final idx = state.tilePages.indexWhere((p) => p.id == page.id);
             if (idx < 0) return;
-            setState(() => _index = idx);
+            _setIndex(idx);
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (_controller.hasClients) _controller.jumpToPage(idx);
             });
@@ -156,6 +205,7 @@ class _TilesTabState extends State<_TilesTab> {
                 _index = state.tilePages.length - 1;
               }
             });
+            widget.state.setCurrentTilePage(_index);
             final target = _index;
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (_controller.hasClients &&
@@ -170,33 +220,84 @@ class _TilesTabState extends State<_TilesTab> {
   }
 }
 
-class _PageGrid extends StatelessWidget {
-  const _PageGrid({required this.state, required this.page});
+/// A scrollable 6-column board. Tiles can be freely positioned and sized
+/// (1x1 up to 6x6); long-press to drag, tap the corner button for options.
+class _TileBoard extends StatefulWidget {
+  const _TileBoard({required this.state, required this.page});
   final AppState state;
   final TilePage page;
 
   @override
+  State<_TileBoard> createState() => _TileBoardState();
+}
+
+class _TileBoardState extends State<_TileBoard> {
+  final GlobalKey _boardKey = GlobalKey();
+  static const double _gap = 8;
+  static const double _pad = 12;
+
+  @override
   Widget build(BuildContext context) {
-    final apps = state.pinsOnPage(page);
-    if (apps.isEmpty) {
+    final state = widget.state;
+    final page = widget.page;
+    final pins = state.pinsOnPage(page);
+    if (pins.isEmpty) {
       return _hint(
         context,
         icon: Icons.grid_view_rounded,
         text: '「${page.name}」还没有磁贴\n点击右上角 ➕ 选择要置顶的应用',
       );
     }
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 120,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: 1,
-      ),
-      itemCount: apps.length,
-      itemBuilder: (context, i) =>
-          _Tile(app: apps[i], state: state, page: page),
-    );
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final cellW =
+          (constraints.maxWidth - _pad * 2 - _gap * (kTileCols - 1)) / kTileCols;
+      final specs = pins.map((a) {
+        final m = state.metaFor(a.packageName);
+        return TileSpec(
+            id: a.packageName, w: m.tileW, h: m.tileH, col: m.tileCol, row: m.tileRow);
+      }).toList();
+      final layout = resolveTileLayout(specs);
+      final rows = layout.rows;
+      final boardHeight =
+          _pad * 2 + rows * cellW + (rows > 1 ? (rows - 1) * _gap : 0.0);
+
+      double x(int col) => _pad + col * (cellW + _gap);
+      double y(int row) => _pad + row * (cellW + _gap);
+      double w(int n) => n * cellW + (n - 1) * _gap;
+      double h(int n) => n * cellW + (n - 1) * _gap;
+
+      return SingleChildScrollView(
+        child: SizedBox(
+          key: _boardKey,
+          height: boardHeight,
+          width: double.infinity,
+          child: Stack(
+            children: [
+              for (final app in pins)
+                Builder(builder: (context) {
+                  final p = layout.placements[app.packageName]!;
+                  return Positioned(
+                    left: x(p.col),
+                    top: y(p.row),
+                    width: w(p.w),
+                    height: h(p.h),
+                    child: _Tile(
+                      app: app,
+                      state: state,
+                      page: page,
+                      boardKey: _boardKey,
+                      cellW: cellW,
+                      gap: _gap,
+                      pad: _pad,
+                    ),
+                  );
+                }),
+            ],
+          ),
+        ),
+      );
+    });
   }
 }
 
@@ -378,43 +479,75 @@ void _pageMenu(
 }
 
 class _Tile extends StatelessWidget {
-  const _Tile({required this.app, required this.state, required this.page});
+  const _Tile({
+    required this.app,
+    required this.state,
+    required this.page,
+    required this.boardKey,
+    required this.cellW,
+    required this.gap,
+    required this.pad,
+  });
+
   final AppInfo app;
   final AppState state;
   final TilePage page;
+  final GlobalKey boardKey;
+  final double cellW;
+  final double gap;
+  final double pad;
 
   @override
   Widget build(BuildContext context) {
+    final meta = state.metaFor(app.packageName);
+    final width = meta.tileW * cellW + (meta.tileW - 1) * gap;
+    final height = meta.tileH * cellW + (meta.tileH - 1) * gap;
+    final shortest = width < height ? width : height;
+    final iconSize = (shortest * 0.42).clamp(24.0, 96.0);
+    final fontScale = (shortest / 56).clamp(0.85, 1.9);
+
+    final content = _content(context, iconSize, fontScale);
+
+    return LongPressDraggable<String>(
+      data: app.packageName,
+      feedback: _feedback(width, height, content),
+      childWhenDragging: Opacity(opacity: 0.25, child: content),
+      onDragEnd: (details) => _onDrop(details),
+      child: content,
+    );
+  }
+
+  Widget _content(BuildContext context, double iconSize, double fontScale) {
     final color = _tileColor(app.appName);
-    return Material(
+    final tappable = Material(
       color: color,
       borderRadius: BorderRadius.circular(10),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => launchApp(context, app.packageName),
-        onLongPress: () => _showTileMenu(context),
         child: Stack(
           children: [
             Positioned(
               left: 10,
               top: 10,
+              right: 26,
               child: AppIcon(
                 packageName: app.packageName,
                 label: app.appName,
-                size: 44,
+                size: iconSize,
               ),
             ),
             Positioned(
               left: 10,
-              right: 10,
+              right: 8,
               bottom: 8,
               child: Text(
                 app.appName,
-                maxLines: 2,
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
-                  fontSize: 12,
+                  fontSize: (12 * fontScale).clamp(11.0, 20.0),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -423,56 +556,179 @@ class _Tile extends StatelessWidget {
         ),
       ),
     );
+    return Stack(
+      children: [
+        Positioned.fill(child: tappable),
+        Positioned(
+          top: 0,
+          right: 0,
+          child: InkWell(
+            onTap: () => _showTileMenu(context),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(Icons.more_vert,
+                  size: 16, color: Colors.white.withValues(alpha: 0.85)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _feedback(double width, double height, Widget child) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Opacity(opacity: 0.85, child: child),
+    );
+  }
+
+  void _onDrop(DraggableDetails details) {
+    final box = boardKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final local = box.globalToLocal(details.offset);
+    final col = ((local.dx - pad) / (cellW + gap)).round();
+    final row = ((local.dy - pad) / (cellW + gap)).round();
+    state.moveTile(app.packageName, col, row);
   }
 
   void _showTileMenu(BuildContext context) {
+    final meta = state.metaFor(app.packageName);
     showModalBottomSheet(
       context: context,
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.rocket_launch_outlined),
-              title: const Text('启动'),
-              onTap: () {
-                Navigator.pop(ctx);
-                launchApp(context, app.packageName);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('应用详情'),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AppDetailScreen(packageName: app.packageName),
-                  ),
-                );
-              },
-            ),
-            if (state.tilePages.length > 1)
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               ListTile(
-                leading: const Icon(Icons.drive_file_move_outline),
-                title: const Text('移动到页面…'),
+                leading: const Icon(Icons.rocket_launch_outlined),
+                title: const Text('启动'),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _moveToPage(context);
+                  launchApp(context, app.packageName);
                 },
               ),
-            ListTile(
-              leading: const Icon(Icons.push_pin_outlined),
-              title: const Text('取消置顶'),
-              onTap: () {
-                state.togglePinned(app.packageName);
+              ListTile(
+                leading: const Icon(Icons.aspect_ratio),
+                title: const Text('调整尺寸'),
+                subtitle: Text('当前 ${meta.tileW} × ${meta.tileH}（一行 $kTileCols 格）'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showSizePicker(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: const Text('应用详情'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          AppDetailScreen(packageName: app.packageName),
+                    ),
+                  );
+                },
+              ),
+              if (state.tilePages.length > 1)
+                ListTile(
+                  leading: const Icon(Icons.drive_file_move_outline),
+                  title: const Text('移动到页面…'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _moveToPage(context);
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.push_pin_outlined),
+                title: const Text('取消置顶'),
+                onTap: () {
+                  state.togglePinned(app.packageName);
+                  Navigator.pop(ctx);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showSizePicker(BuildContext context) async {
+    final meta = state.metaFor(app.packageName);
+    var w = meta.tileW;
+    var h = meta.tileH;
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('调整磁贴尺寸'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _stepper(
+                label: '宽',
+                value: w,
+                min: 1,
+                max: kTileCols,
+                onChanged: (v) => setLocal(() => w = v),
+              ),
+              const SizedBox(height: 8),
+              _stepper(
+                label: '高',
+                value: h,
+                min: 1,
+                max: kTileMaxH,
+                onChanged: (v) => setLocal(() => h = v),
+              ),
+              const SizedBox(height: 12),
+              Text('1 行 = $kTileCols 格，例如 2×2、1×3、4×4',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+            FilledButton(
+              onPressed: () {
+                state.setTileSize(app.packageName, w, h);
                 Navigator.pop(ctx);
               },
+              child: const Text('确定'),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _stepper({
+    required String label,
+    required int value,
+    required int min,
+    required int max,
+    required ValueChanged<int> onChanged,
+  }) {
+    return Row(
+      children: [
+        SizedBox(width: 32, child: Text(label)),
+        IconButton(
+          icon: const Icon(Icons.remove_circle_outline),
+          onPressed: value > min ? () => onChanged(value - 1) : null,
+        ),
+        SizedBox(
+          width: 28,
+          child: Text('$value',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        IconButton(
+          icon: const Icon(Icons.add_circle_outline),
+          onPressed: value < max ? () => onChanged(value + 1) : null,
+        ),
+      ],
     );
   }
 

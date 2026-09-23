@@ -4,6 +4,7 @@ import 'package:hamstapp/models/app_meta.dart';
 import 'package:hamstapp/models/category.dart';
 import 'package:hamstapp/models/snapshot.dart';
 import 'package:hamstapp/models/snapshot_diff.dart';
+import 'package:hamstapp/utils/tile_layout.dart';
 
 SnapshotEntry _e(String pkg, String ver, int code) => SnapshotEntry(
       packageName: pkg,
@@ -144,5 +145,46 @@ void main() {
     final diff = SnapshotDiff.between(older, newer);
     expect(diff.removed.map((e) => e.packageName), contains('com.a'));
     expect(diff.added, isEmpty);
+  });
+
+  test('tile layout packs six per row', () {
+    final specs = List.generate(7, (i) => TileSpec(id: 'a$i'));
+    final res = resolveTileLayout(specs);
+    expect(res.rows, 2);
+    expect(res.placements['a0']!.col, 0);
+    expect(res.placements['a5']!.col, 5);
+    expect(res.placements['a6']!.row, 1);
+    expect(res.placements['a6']!.col, 0);
+  });
+
+  test('tile layout honours stored positions', () {
+    final res = resolveTileLayout([
+      const TileSpec(id: 'x', col: 3, row: 2, w: 2, h: 2),
+      const TileSpec(id: 'y'),
+    ]);
+    expect(res.placements['x']!.col, 3);
+    expect(res.placements['x']!.row, 2);
+    expect(res.rows, 4);
+    expect(res.placements['y']!.col, 0);
+    expect(res.placements['y']!.row, 0);
+  });
+
+  test('tile layout supports 4x4 and 1x3 sizes', () {
+    final res = resolveTileLayout([
+      const TileSpec(id: 'big', w: 4, h: 4),
+      const TileSpec(id: 'tall', w: 1, h: 3),
+    ]);
+    expect(res.placements['big']!.w, 4);
+    expect(res.placements['big']!.h, 4);
+    expect(res.rows, 4);
+    expect(res.placements['tall']!.col, 4);
+    expect(res.placements['tall']!.row, 0);
+  });
+
+  test('resolveMove finds nearest free spot on collision', () {
+    final others = [const TileSpec(id: 'o', col: 0, row: 0, w: 2, h: 2)];
+    final p = resolveMove(others, 'n', 0, 0, 2, 2);
+    expect(p.col, 2);
+    expect(p.row, 0);
   });
 }
