@@ -61,6 +61,25 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(_titles[_index],
             style: const TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          if (_index == 0)
+            state.scanning
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  )
+                : IconButton(
+                    tooltip: '刷新应用列表',
+                    icon: const Icon(Icons.refresh),
+                    onPressed: state.scan,
+                  ),
+        ],
       ),
       body: IndexedStack(index: _index, children: screens),
       bottomNavigationBar: NavigationBar(
