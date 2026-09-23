@@ -7,6 +7,7 @@ import '../models/app_meta.dart';
 import '../models/backup_list.dart';
 import '../models/category.dart';
 import '../models/snapshot.dart';
+import '../models/tile_page.dart';
 import '../services/native_apps.dart';
 import '../services/storage.dart';
 import '../utils/format.dart';
@@ -37,6 +38,7 @@ class AppState extends ChangeNotifier {
   List<AppCategory> categories = <AppCategory>[];
   List<Snapshot> snapshots = <Snapshot>[];
   List<BackupList> backupLists = <BackupList>[];
+  List<TilePage> tilePages = <TilePage>[];
 
   /// Apps detected as uninstalled during the most recent scan and that the
   /// user has not been asked about yet this session.
@@ -71,6 +73,15 @@ class AppState extends ChangeNotifier {
     categories = await _loadCategories();
     snapshots = await _loadSnapshots();
     backupLists = await _loadBackupLists();
+    tilePages = await _loadTilePages();
+    if (tilePages.isEmpty) {
+      tilePages.add(TilePage(
+        id: _newId(),
+        name: '页面 1',
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+      ));
+      await _persistTilePages();
+    }
     final cached = await storage.readJson(_kAppsCache);
     if (cached is List) {
       apps = cached
@@ -501,6 +512,81 @@ class AppState extends ChangeNotifier {
         .writeJson(_kBackupLists, backupLists.map((b) => b.toMap()).toList());
   }
 
+  // ---------------------------------------------------------------- tile pages
+
+  Future<List<TilePage>> _loadTilePages() async {
+    final raw = await storage.readJson(_kTilePages);
+    if (raw is List) {
+      return raw
+          .map((e) => TilePage.fromMap((e as Map).cast<String, dynamic>()))
+          .toList();
+    }
+    return <TilePage>[];
+  }
+
+  Future<void> _persistTilePages() async {
+    await storage
+        .writeJson(_kTilePages, tilePages.map((p) => p.toMap()).toList());
+  }
+
+  /// Pinned apps shown on [page]. Pins with an unknown/empty page id fall back
+  /// to the first page so they are never lost.
+  List<AppInfo> pinsOnPage(TilePage page) {
+    if (tilePages.isEmpty) return pinnedApps;
+    final first = tilePages.first;
+    final validIds = tilePages.map((p) => p.id).toSet();
+    return apps.where((a) {
+      if (!metaFor(a.packageName).pinned) return false;
+      final pid = metaFor(a.packageName).tilePageId;
+      if (page.id == first.id) {
+        return pid.isEmpty || !validIds.contains(pid) || pid == page.id;
+      }
+      return pid == page.id;
+    }).toList()
+      ..sort((a, b) =>
+          a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
+  }
+
+  int pinCountOnPage(TilePage page) => pinsOnPage(page).length;
+
+  Future<TilePage> addTilePage(String name) async {
+    final page = TilePage(
+      id: _newId(),
+      name: name.isEmpty ? '页面 ${tilePages.length + 1}' : name,
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    tilePages.add(page);
+    await _persistTilePages();
+    notifyListeners();
+    return page;
+  }
+
+  Future<void> renameTilePage(String id, String name) async {
+    final page = tilePages.firstWhere((p) => p.id == id);
+    page.name = name;
+    await _persistTilePages();
+    notifyListeners();
+  }
+
+  Future<void> deleteTilePage(String id) async {
+    if (tilePages.length <= 1) return;
+    tilePages.removeWhere((p) => p.id == id);
+    final firstId = tilePages.first.id;
+    for (final m in meta.values) {
+      if (m.pinned && m.tilePageId == id) m.tilePageId = firstId;
+    }
+    await _persistTilePages();
+    await _persistMeta();
+    notifyListeners();
+  }
+
+  Future<void> assignPinToPage(String packageName, String pageId) async {
+    final m = metaFor(packageName);
+    m.tilePageId = pageId;
+    await _persistMeta();
+    notifyListeners();
+  }
+
   // ---------------------------------------------------------------- filtering
 
   List<AppInfo> get visibleApps {
@@ -641,4 +727,5 @@ class AppState extends ChangeNotifier {
   static const _kSnapshots = 'snapshots';
   static const _kBackupLists = 'backup_lists';
   static const _kAppsCache = 'apps_cache';
+  static const _kTilePages = 'tile_pages';
 }

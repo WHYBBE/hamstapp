@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app_info.dart';
+import '../models/tile_page.dart';
 import '../state/app_state.dart';
 import '../utils/actions.dart';
 import '../utils/format.dart';
@@ -86,18 +87,102 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
 
 // ---------------------------------------------------------------- 磁贴
 
-class _TilesTab extends StatelessWidget {
+class _TilesTab extends StatefulWidget {
   const _TilesTab({required this.state});
   final AppState state;
 
   @override
+  State<_TilesTab> createState() => _TilesTabState();
+}
+
+class _TilesTabState extends State<_TilesTab> {
+  final PageController _controller = PageController();
+  int _index = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final apps = state.pinnedApps;
+    final state = widget.state;
+    final pages = state.tilePages;
+    if (pages.isEmpty) {
+      return _hint(
+        context,
+        icon: Icons.grid_view_rounded,
+        text: '还没有磁贴页',
+      );
+    }
+    if (_index >= pages.length) _index = pages.length - 1;
+
+    return Column(
+      children: [
+        Expanded(
+          child: PageView.builder(
+            controller: _controller,
+            itemCount: pages.length,
+            onPageChanged: (i) => setState(() => _index = i),
+            itemBuilder: (context, i) =>
+                _PageGrid(state: state, page: pages[i]),
+          ),
+        ),
+        _PageBar(
+          state: state,
+          currentIndex: _index,
+          onSelect: (i) {
+            setState(() => _index = i);
+            _controller.animateToPage(
+              i,
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOut,
+            );
+          },
+          onAdd: () async {
+            final page = await _promptAddPage(context, state);
+            if (page == null) return;
+            final idx = state.tilePages.indexWhere((p) => p.id == page.id);
+            if (idx < 0) return;
+            setState(() => _index = idx);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_controller.hasClients) _controller.jumpToPage(idx);
+            });
+          },
+          onChanged: () {
+            setState(() {
+              if (_index >= state.tilePages.length) {
+                _index = state.tilePages.length - 1;
+              }
+            });
+            final target = _index;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_controller.hasClients &&
+                  (_controller.page?.round() ?? 0) != target) {
+                _controller.jumpToPage(target);
+              }
+            });
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _PageGrid extends StatelessWidget {
+  const _PageGrid({required this.state, required this.page});
+  final AppState state;
+  final TilePage page;
+
+  @override
+  Widget build(BuildContext context) {
+    final apps = state.pinsOnPage(page);
     if (apps.isEmpty) {
       return _hint(
         context,
         icon: Icons.grid_view_rounded,
-        text: '还没有磁贴\n点击右上角 ➕ 选择要置顶的应用',
+        text: '「${page.name}」还没有磁贴\n点击右上角 ➕ 选择要置顶的应用',
       );
     }
     return GridView.builder(
@@ -109,15 +194,194 @@ class _TilesTab extends StatelessWidget {
         childAspectRatio: 1,
       ),
       itemCount: apps.length,
-      itemBuilder: (context, i) => _Tile(app: apps[i], state: state),
+      itemBuilder: (context, i) =>
+          _Tile(app: apps[i], state: state, page: page),
     );
   }
 }
 
+/// Bottom page switcher (put at the very bottom, like a tab bar).
+class _PageBar extends StatelessWidget {
+  const _PageBar({
+    required this.state,
+    required this.currentIndex,
+    required this.onSelect,
+    required this.onChanged,
+    required this.onAdd,
+  });
+
+  final AppState state;
+  final int currentIndex;
+  final ValueChanged<int> onSelect;
+  final VoidCallback onChanged;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final pages = state.tilePages;
+    return Container(
+      height: 54,
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              itemCount: pages.length,
+              itemBuilder: (context, i) {
+                final page = pages[i];
+                final selected = i == currentIndex;
+                final count = state.pinCountOnPage(page);
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                  child: GestureDetector(
+                    onTap: () => onSelect(i),
+                    onLongPress: () => _pageMenu(context, state, page, onChanged),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? scheme.primaryContainer
+                            : scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            page.name,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight:
+                                  selected ? FontWeight.w700 : FontWeight.w500,
+                              color: selected
+                                  ? scheme.onPrimaryContainer
+                                  : scheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            '$count',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: (selected
+                                      ? scheme.onPrimaryContainer
+                                      : scheme.onSurfaceVariant)
+                                  .withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          IconButton(
+            tooltip: '新建磁贴页',
+            icon: const Icon(Icons.add),
+            onPressed: onAdd,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Future<TilePage?> _promptAddPage(BuildContext context, AppState state) async {
+  final controller = TextEditingController();
+  final name = await showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('新建磁贴页'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        decoration: const InputDecoration(labelText: '页面名称'),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+        FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('创建')),
+      ],
+    ),
+  );
+  if (name == null) return null;
+  return state.addTilePage(name);
+}
+
+void _pageMenu(
+  BuildContext context,
+  AppState state,
+  TilePage page,
+  VoidCallback onChanged,
+) {
+  showModalBottomSheet(
+    context: context,
+    builder: (ctx) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.drive_file_rename_outline),
+            title: const Text('重命名页面'),
+            onTap: () async {
+              Navigator.pop(ctx);
+              final controller = TextEditingController(text: page.name);
+              final name = await showDialog<String>(
+                context: context,
+                builder: (dctx) => AlertDialog(
+                  title: const Text('重命名页面'),
+                  content:
+                      TextField(controller: controller, autofocus: true),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(dctx),
+                        child: const Text('取消')),
+                    FilledButton(
+                        onPressed: () =>
+                            Navigator.pop(dctx, controller.text.trim()),
+                        child: const Text('保存')),
+                  ],
+                ),
+              );
+              if (name != null && name.isNotEmpty) {
+                await state.renameTilePage(page.id, name);
+                onChanged();
+              }
+            },
+          ),
+          if (state.tilePages.length > 1)
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('删除页面'),
+              subtitle: const Text('页面上的磁贴会移回第一个页面'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await state.deleteTilePage(page.id);
+                onChanged();
+              },
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _Tile extends StatelessWidget {
-  const _Tile({required this.app, required this.state});
+  const _Tile({required this.app, required this.state, required this.page});
   final AppInfo app;
   final AppState state;
+  final TilePage page;
 
   @override
   Widget build(BuildContext context) {
@@ -189,6 +453,15 @@ class _Tile extends StatelessWidget {
                 );
               },
             ),
+            if (state.tilePages.length > 1)
+              ListTile(
+                leading: const Icon(Icons.drive_file_move_outline),
+                title: const Text('移动到页面…'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _moveToPage(context);
+                },
+              ),
             ListTile(
               leading: const Icon(Icons.push_pin_outlined),
               title: const Text('取消置顶'),
@@ -201,6 +474,36 @@ class _Tile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _moveToPage(BuildContext context) async {
+    final others =
+        state.tilePages.where((p) => p.id != page.id).toList();
+    final target = await showModalBottomSheet<TilePage>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Text('移动到',
+                  style:
+                      TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            ...others.map((p) => ListTile(
+                  leading: const Icon(Icons.grid_view_rounded),
+                  title: Text(p.name),
+                  trailing: Text('${state.pinCountOnPage(p)}'),
+                  onTap: () => Navigator.pop(ctx, p),
+                )),
+          ],
+        ),
+      ),
+    );
+    if (target != null) {
+      await state.assignPinToPage(app.packageName, target.id);
+    }
   }
 
   Color _tileColor(String label) {

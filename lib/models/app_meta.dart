@@ -20,6 +20,9 @@ class AppMeta {
   /// Last time the app was launched from this app; 0 means never.
   int lastLaunchedAt;
 
+  /// Which tile page this pinned app lives on ('' = default/first page).
+  String tilePageId;
+
   AppMeta({
     required this.packageName,
     this.reason = '',
@@ -32,6 +35,7 @@ class AppMeta {
     this.uninstallReason = '',
     this.uninstalledAt = 0,
     this.lastLaunchedAt = 0,
+    this.tilePageId = '',
   })  : categoryIds = categoryIds ?? <String>[],
         firstSeenAt =
             firstSeenAt ?? DateTime.now().millisecondsSinceEpoch;
@@ -48,6 +52,7 @@ class AppMeta {
         uninstallReason: map['uninstallReason'] as String? ?? '',
         uninstalledAt: map['uninstalledAt'] as int? ?? 0,
         lastLaunchedAt: map['lastLaunchedAt'] as int? ?? 0,
+        tilePageId: map['tilePageId'] as String? ?? '',
       );
 
   Map<String, dynamic> toMap() => {
@@ -62,6 +67,7 @@ class AppMeta {
         'uninstallReason': uninstallReason,
         'uninstalledAt': uninstalledAt,
         'lastLaunchedAt': lastLaunchedAt,
+        'tilePageId': tilePageId,
       };
 
   bool get isUninstalled => uninstalledAt != 0;

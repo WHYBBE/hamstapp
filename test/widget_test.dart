@@ -46,12 +46,16 @@ void main() {
       lastKnownName: '示例',
       uninstallReason: '太占空间',
       uninstalledAt: 123456789,
+      lastLaunchedAt: 999,
+      tilePageId: 'page-1',
     );
     final restored = AppMeta.fromMap(meta.toMap());
     expect(restored.isUninstalled, isTrue);
     expect(restored.lastKnownName, '示例');
     expect(restored.uninstallReason, '太占空间');
     expect(restored.uninstalledAt, 123456789);
+    expect(restored.lastLaunchedAt, 999);
+    expect(restored.tilePageId, 'page-1');
     expect(restored.hasUserData, isTrue);
   });
 
