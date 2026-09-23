@@ -9,6 +9,7 @@ import '../models/category.dart';
 import '../models/snapshot.dart';
 import '../services/native_apps.dart';
 import '../services/storage.dart';
+import '../utils/format.dart';
 
 /// Which apps are in scope by type. Kept separate from [AppFilter] so it does
 /// not take part in the annotation filter radio group.
@@ -589,6 +590,19 @@ class AppState extends ChangeNotifier {
 
   int get userAppCount => apps.where((a) => !a.isSystem).length;
   int get systemAppCount => apps.where((a) => a.isSystem).length;
+
+  /// Human readable summary shown as a hint in the app bar (long-press).
+  String get appsStatsText {
+    if (scanning) return '正在扫描…';
+    final last = lastScanAt;
+    if (last == null) return '尚未扫描，点击右上角刷新';
+    final ago = Fmt.relative(last.millisecondsSinceEpoch);
+    if (filter == AppFilter.uninstalled) {
+      return '卸载记录 ${uninstalledApps.length} 条 · 上次扫描 $ago';
+    }
+    return '共 ${apps.length} 个应用（用户 $userAppCount / 系统 $systemAppCount）'
+        ' · 显示 ${visibleApps.length} · 用时 $lastScanMs ms · $ago';
+  }
 
   static const _kMeta = 'meta';
   static const _kCategories = 'categories';

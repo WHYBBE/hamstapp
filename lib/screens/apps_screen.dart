@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
-import '../utils/format.dart';
 import '../widgets/app_tile.dart';
 import '../widgets/uninstall_reason.dart';
 import 'app_detail_screen.dart';
@@ -20,7 +19,6 @@ class AppsScreen extends StatelessWidget {
       children: [
         _SearchBar(state: state),
         _FilterRow(state: state),
-        _StatsBar(state: state, shown: showUninstalled ? state.uninstalledApps.length : apps.length),
         Expanded(
           child: RefreshIndicator(
             onRefresh: state.scan,
@@ -319,44 +317,6 @@ class _ScopeDropdown extends StatelessWidget {
                     active ? scheme.onPrimaryContainer : scheme.onSurfaceVariant),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _StatsBar extends StatelessWidget {
-  const _StatsBar({required this.state, required this.shown});
-  final AppState state;
-  final int shown;
-
-  @override
-  Widget build(BuildContext context) {
-    final last = state.lastScanAt;
-    final text = state.scanning
-        ? '正在扫描…'
-        : last == null
-            ? '尚未扫描，下拉刷新'
-            : state.filter == AppFilter.uninstalled
-                ? '卸载记录 $shown 条 · 上次扫描 ${Fmt.relative(last.millisecondsSinceEpoch)}'
-                : '共 ${state.apps.length} 个应用（用户 ${state.userAppCount} / 系统 ${state.systemAppCount}）'
-                    ' · 显示 $shown · 用时 ${state.lastScanMs} ms · ${Fmt.relative(last.millisecondsSinceEpoch)}';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
-          ),
-          if (state.scanning)
-            const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-        ],
       ),
     );
   }

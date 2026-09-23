@@ -62,6 +62,21 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Text(_titles[_index],
             style: const TextStyle(fontWeight: FontWeight.bold)),
         actions: [
+          if (_index == 0) ...[
+            IconButton(
+              tooltip: state.appsStatsText,
+              icon: const Icon(Icons.info_outline),
+              onPressed: () {
+                ScaffoldMessenger.of(context)
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(SnackBar(
+                    content: Text(state.appsStatsText),
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 4),
+                  ));
+              },
+            ),
+          ],
           if (_index == 0)
             state.scanning
                 ? const Padding(
