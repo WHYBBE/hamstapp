@@ -20,6 +20,10 @@ class BackupListsScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: const Text('备份列表',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _create(context, state),
         icon: const Icon(Icons.playlist_add),

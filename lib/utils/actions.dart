@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../services/native_apps.dart';
+import '../state/app_state.dart';
 
 Future<void> launchApp(BuildContext context, String packageName) async {
+  final state = context.read<AppState>();
   final ok = await NativeApps.launchApp(packageName);
+  if (ok) {
+    await state.markLaunched(packageName);
+  }
   if (!context.mounted) return;
   if (!ok) {
     ScaffoldMessenger.of(context).showSnackBar(

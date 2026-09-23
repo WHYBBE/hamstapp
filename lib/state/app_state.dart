@@ -581,6 +581,38 @@ class AppState extends ChangeNotifier {
     ..sort((a, b) =>
         a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
 
+  /// Apps manually pinned to the tile board, ordered by name.
+  List<AppInfo> get pinnedApps => apps
+      .where((a) => metaFor(a.packageName).pinned)
+      .toList()
+    ..sort((a, b) =>
+        a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
+
+  /// Apps launched from this app, most recent first.
+  List<AppInfo> get recentApps {
+    final list = apps
+        .where((a) => metaFor(a.packageName).lastLaunchedAt > 0)
+        .toList()
+      ..sort((a, b) => metaFor(b.packageName)
+          .lastLaunchedAt
+          .compareTo(metaFor(a.packageName).lastLaunchedAt));
+    return list;
+  }
+
+  Future<void> markLaunched(String packageName) async {
+    final m = metaFor(packageName);
+    m.lastLaunchedAt = DateTime.now().millisecondsSinceEpoch;
+    await _persistMeta();
+    notifyListeners();
+  }
+
+  Future<void> togglePinned(String packageName) async {
+    final m = metaFor(packageName);
+    m.pinned = !m.pinned;
+    await _persistMeta();
+    notifyListeners();
+  }
+
   AppInfo? appByPackage(String packageName) {
     for (final a in apps) {
       if (a.packageName == packageName) return a;

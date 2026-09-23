@@ -17,6 +17,9 @@ class AppMeta {
   /// Timestamp when the uninstall was detected; 0 means still installed.
   int uninstalledAt;
 
+  /// Last time the app was launched from this app; 0 means never.
+  int lastLaunchedAt;
+
   AppMeta({
     required this.packageName,
     this.reason = '',
@@ -28,6 +31,7 @@ class AppMeta {
     this.lastKnownName = '',
     this.uninstallReason = '',
     this.uninstalledAt = 0,
+    this.lastLaunchedAt = 0,
   })  : categoryIds = categoryIds ?? <String>[],
         firstSeenAt =
             firstSeenAt ?? DateTime.now().millisecondsSinceEpoch;
@@ -43,6 +47,7 @@ class AppMeta {
         lastKnownName: map['lastKnownName'] as String? ?? '',
         uninstallReason: map['uninstallReason'] as String? ?? '',
         uninstalledAt: map['uninstalledAt'] as int? ?? 0,
+        lastLaunchedAt: map['lastLaunchedAt'] as int? ?? 0,
       );
 
   Map<String, dynamic> toMap() => {
@@ -56,6 +61,7 @@ class AppMeta {
         'lastKnownName': lastKnownName,
         'uninstallReason': uninstallReason,
         'uninstalledAt': uninstalledAt,
+        'lastLaunchedAt': lastLaunchedAt,
       };
 
   bool get isUninstalled => uninstalledAt != 0;

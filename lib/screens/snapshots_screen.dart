@@ -30,6 +30,10 @@ class SnapshotsScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: const Text('快照对比',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _create(context, state),
         icon: const Icon(Icons.camera_alt_outlined),

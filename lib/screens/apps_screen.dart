@@ -15,43 +15,80 @@ class AppsScreen extends StatelessWidget {
     final showUninstalled = state.filter == AppFilter.uninstalled;
     final apps = state.visibleApps;
 
-    return Column(
-      children: [
-        _SearchBar(state: state),
-        _FilterRow(state: state),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: state.scan,
-            child: showUninstalled
-                ? _UninstalledList(state: state)
-                : apps.isEmpty
-                    ? _EmptyView(state: state)
-                    : ListView.builder(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        keyboardDismissBehavior:
-                            ScrollViewKeyboardDismissBehavior.onDrag,
-                        itemCount: apps.length,
-                        itemBuilder: (context, i) {
-                          final app = apps[i];
-                          return AppListTile(
-                            app: app,
-                            state: state,
-                            onTap: () {
-                              FocusManager.instance.primaryFocus?.unfocus();
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => AppDetailScreen(
-                                      packageName: app.packageName),
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: const Text('应用', style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            tooltip: state.appsStatsText,
+            icon: const Icon(Icons.info_outline),
+            onPressed: () {
+              ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(SnackBar(
+                  content: Text(state.appsStatsText),
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 4),
+                ));
+            },
           ),
-        ),
-      ],
+          state.scanning
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              : IconButton(
+                  tooltip: '刷新应用列表',
+                  icon: const Icon(Icons.refresh),
+                  onPressed: state.scan,
+                ),
+        ],
+      ),
+      body: Column(
+        children: [
+          _SearchBar(state: state),
+          _FilterRow(state: state),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: state.scan,
+              child: showUninstalled
+                  ? _UninstalledList(state: state)
+                  : apps.isEmpty
+                      ? _EmptyView(state: state)
+                      : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          itemCount: apps.length,
+                          itemBuilder: (context, i) {
+                            final app = apps[i];
+                            return AppListTile(
+                              app: app,
+                              state: state,
+                              onTap: () {
+                                FocusManager.instance.primaryFocus?.unfocus();
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => AppDetailScreen(
+                                        packageName: app.packageName),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

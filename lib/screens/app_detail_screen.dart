@@ -103,7 +103,16 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
                 ),
               ],
             ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: meta.pinned,
+            onChanged: (v) =>
+                state.updateMeta(widget.packageName, pinned: v),
+            title: const Text('置顶到磁贴'),
+            subtitle: const Text('在「快速启动 → 磁贴」中显示'),
+          ),
+          const SizedBox(height: 12),
           _SectionTitle('安装原因'),
           TextField(
             controller: _reason,
