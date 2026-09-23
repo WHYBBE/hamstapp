@@ -6,6 +6,7 @@ import '../widgets/uninstall_reason.dart';
 import 'apps_screen.dart';
 import 'backup_lists_screen.dart';
 import 'quick_launch_screen.dart';
+import 'settings_screen.dart';
 import 'snapshots_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -48,6 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
       AppsScreen(),
       SnapshotsScreen(),
       BackupListsScreen(),
+      SettingsScreen(),
     ];
 
     return Scaffold(
@@ -82,6 +84,10 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icon(Icons.inventory_2_outlined),
               selectedIcon: Icon(Icons.inventory_2),
               label: '备份'),
+          NavigationDestination(
+              icon: Icon(Icons.settings_outlined),
+              selectedIcon: Icon(Icons.settings),
+              label: '设置'),
         ],
       ),
     );

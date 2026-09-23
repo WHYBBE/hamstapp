@@ -1,32 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'screens/home_screen.dart';
 import 'services/storage.dart';
 import 'state/app_state.dart';
+import 'utils/system_ui.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Hide the status bar so it never reserves layout space. Android draws it
-  // as a transient overlay (on swipe) which does not reflow the UI. The bottom
-  // navigation bar is kept visible.
-  await SystemChrome.setEnabledSystemUIMode(
-    SystemUiMode.manual,
-    overlays: const [SystemUiOverlay.bottom],
-  );
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      statusBarBrightness: Brightness.light,
-    ),
-  );
-
   final storage = await Storage.instance();
   final state = AppState(storage);
   await state.init();
+  await applyStatusBarVisibility(state.showSystemStatusBar);
   runApp(HamstappApp(state: state));
 }
 

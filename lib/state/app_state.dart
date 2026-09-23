@@ -11,6 +11,7 @@ import '../models/tile_page.dart';
 import '../services/native_apps.dart';
 import '../services/storage.dart';
 import '../utils/format.dart';
+import '../utils/system_ui.dart';
 import '../utils/tile_layout.dart';
 
 /// Which apps are in scope by type. Kept separate from [AppFilter] so it does
@@ -40,6 +41,7 @@ class AppState extends ChangeNotifier {
   List<Snapshot> snapshots = <Snapshot>[];
   List<BackupList> backupLists = <BackupList>[];
   List<TilePage> tilePages = <TilePage>[];
+  Map<String, dynamic> settings = <String, dynamic>{};
 
   /// Apps detected as uninstalled during the most recent scan and that the
   /// user has not been asked about yet this session.
@@ -74,6 +76,7 @@ class AppState extends ChangeNotifier {
     categories = await _loadCategories();
     snapshots = await _loadSnapshots();
     backupLists = await _loadBackupLists();
+    settings = await _loadSettings();
     tilePages = await _loadTilePages();
     if (tilePages.isEmpty) {
       tilePages.add(TilePage(
@@ -664,6 +667,28 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---------------------------------------------------------------- settings
+
+  Future<Map<String, dynamic>> _loadSettings() async {
+    final raw = await storage.readJson(_kSettings);
+    if (raw is Map) return raw.cast<String, dynamic>();
+    return <String, dynamic>{};
+  }
+
+  Future<void> _persistSettings() async {
+    await storage.writeJson(_kSettings, settings);
+  }
+
+  bool get showSystemStatusBar =>
+      settings['show_system_status_bar'] as bool? ?? true;
+
+  Future<void> setShowSystemStatusBar(bool value) async {
+    settings['show_system_status_bar'] = value;
+    await _persistSettings();
+    await applyStatusBarVisibility(value);
+    notifyListeners();
+  }
+
   /// Transient, board-wide edit mode. While on, tiles can be moved/resized and
   /// navigation is blocked until the user finishes editing.
   bool tileEditMode = false;
@@ -827,4 +852,5 @@ class AppState extends ChangeNotifier {
   static const _kBackupLists = 'backup_lists';
   static const _kAppsCache = 'apps_cache';
   static const _kTilePages = 'tile_pages';
+  static const _kSettings = 'settings';
 }

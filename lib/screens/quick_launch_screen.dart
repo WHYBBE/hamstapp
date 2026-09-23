@@ -103,6 +103,13 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
                 return;
               }
               state.setTileEditMode(true);
+              ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(const SnackBar(
+                  content: Text('编辑模式：长按磁贴拖动移动，拖动右下角缩放；完成后点右上角「完成」'),
+                  behavior: SnackBarBehavior.floating,
+                  duration: Duration(seconds: 4),
+                ));
             },
           ),
           IconButton(
@@ -414,47 +421,7 @@ class _TileBoardState extends State<_TileBoard> {
       );
     });
 
-    if (!editable) return board;
-    return Column(
-      children: [
-        _EditBanner(
-          onDone: () => state.setTileEditMode(false),
-        ),
-        Expanded(child: board),
-      ],
-    );
-  }
-}
-
-class _EditBanner extends StatelessWidget {
-  const _EditBanner({required this.onDone});
-
-  final VoidCallback onDone;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      color: scheme.primaryContainer,
-      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-      child: Row(
-        children: [
-          Icon(Icons.edit, size: 18, color: scheme.onPrimaryContainer),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '编辑模式：长按拖动移动，右下角拖动缩放',
-              style: TextStyle(fontSize: 12.5, color: scheme.onPrimaryContainer),
-            ),
-          ),
-          TextButton(
-            onPressed: onDone,
-            child: const Text('完成'),
-          ),
-        ],
-      ),
-    );
+    return board;
   }
 }
 
