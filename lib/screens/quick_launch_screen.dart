@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -298,9 +299,12 @@ class _TileBoardState extends State<_TileBoard> {
   }
 }
 
-const double _kHandleSize = 24;
+const double _kHandleSize = 40;
 
-/// A draggable bottom-right handle that resizes a tile directly on the board.
+/// A bottom-right grip that resizes a tile directly on the board.
+///
+/// Uses an immediate drag recognizer so the enclosing scroll view never steals
+/// the gesture (which made vertical resizing scroll the board instead).
 class _ResizeHandle extends StatefulWidget {
   const _ResizeHandle({
     required this.state,
@@ -323,27 +327,31 @@ class _ResizeHandle extends StatefulWidget {
 }
 
 class _ResizeHandleState extends State<_ResizeHandle> {
+  double _startW = 1;
+  double _startH = 1;
   double _accX = 0;
   double _accY = 0;
   int _w = 1;
   int _h = 1;
-  bool _dragging = false;
+  bool _active = false;
 
-  void _onStart(DragStartDetails _) {
+  void _start(Offset _) {
     final m = widget.state.metaFor(widget.packageName);
+    _startW = m.tileW.toDouble();
+    _startH = m.tileH.toDouble();
     _w = m.tileW;
     _h = m.tileH;
     _accX = 0;
     _accY = 0;
-    _dragging = true;
+    setState(() => _active = true);
   }
 
-  void _onUpdate(DragUpdateDetails d) {
+  void _update(Offset delta) {
     final unit = widget.cellW + widget.gap;
-    _accX += d.delta.dx;
-    _accY += d.delta.dy;
-    final gw = (_w + (_accX / unit)).round().clamp(1, kTileCols);
-    final gh = (_h + (_accY / unit)).round().clamp(1, kTileMaxH);
+    _accX += delta.dx;
+    _accY += delta.dy;
+    final gw = (_startW + _accX / unit).round().clamp(1, kTileCols);
+    final gh = (_startH + _accY / unit).round().clamp(1, kTileMaxH);
     if (gw != _w || gh != _h) {
       setState(() {
         _w = gw;
@@ -353,37 +361,88 @@ class _ResizeHandleState extends State<_ResizeHandle> {
     }
   }
 
-  void _onEnd(DragEndDetails _) {
-    if (!_dragging) return;
-    _dragging = false;
+  void _end() {
+    if (!_active) return;
+    setState(() => _active = false);
     widget.onEnd();
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return RawGestureDetector(
       behavior: HitTestBehavior.opaque,
-      onPanStart: _onStart,
-      onPanUpdate: _onUpdate,
-      onPanEnd: _onEnd,
+      gestures: <Type, GestureRecognizerFactory>{
+        ImmediateMultiDragGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<
+                ImmediateMultiDragGestureRecognizer>(
+          () => ImmediateMultiDragGestureRecognizer(),
+          (instance) {
+            instance.onStart = (position) {
+              _start(position);
+              return _ResizeDrag(onUpdate: _update, onEnd: _end);
+            };
+          },
+        ),
+      },
       child: Align(
         alignment: Alignment.bottomRight,
-        child: Container(
-          margin: const EdgeInsets.all(2),
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: _dragging ? 0.55 : 0.32),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Icon(
-            Icons.open_in_full,
-            size: 13,
-            color: Colors.white.withValues(alpha: 0.95),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: CustomPaint(
+            size: const Size(22, 22),
+            painter: _CornerGripPainter(active: _active),
           ),
         ),
       ),
     );
   }
+}
+
+class _ResizeDrag extends Drag {
+  _ResizeDrag({required this.onUpdate, required this.onEnd});
+
+  final void Function(Offset delta) onUpdate;
+  final VoidCallback onEnd;
+
+  @override
+  void update(DragUpdateDetails details) => onUpdate(details.delta);
+
+  @override
+  void end(DragEndDetails details) => onEnd();
+
+  @override
+  void cancel() => onEnd();
+}
+
+/// Draws a small rounded corner border in the bottom-right corner.
+class _CornerGripPainter extends CustomPainter {
+  _CornerGripPainter({required this.active});
+
+  final bool active;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const inset = 2.0;
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: active ? 1.0 : 0.7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = active ? 3.5 : 3.0
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final r = size.width * 0.38;
+    final path = Path()
+      ..moveTo(inset, size.height - inset)
+      ..lineTo(size.width - r, size.height - inset)
+      ..quadraticBezierTo(
+          size.width - inset, size.height - inset, size.width - inset, size.height - r)
+      ..lineTo(size.width - inset, inset);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CornerGripPainter oldDelegate) =>
+      oldDelegate.active != active;
 }
 
 /// Bottom page switcher (put at the very bottom, like a tab bar).
