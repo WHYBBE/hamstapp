@@ -195,6 +195,11 @@ class _TileBoardState extends State<_TileBoard> {
   static const double _gap = 8;
   static const double _pad = 12;
 
+  // Live resize preview (board-level so tiles re-layout while dragging).
+  String? _resizeId;
+  int _resizeW = 1;
+  int _resizeH = 1;
+
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
@@ -213,8 +218,14 @@ class _TileBoardState extends State<_TileBoard> {
           (constraints.maxWidth - _pad * 2 - _gap * (kTileCols - 1)) / kTileCols;
       final specs = pins.map((a) {
         final m = state.metaFor(a.packageName);
+        final resizing = a.packageName == _resizeId;
         return TileSpec(
-            id: a.packageName, w: m.tileW, h: m.tileH, col: m.tileCol, row: m.tileRow);
+          id: a.packageName,
+          w: resizing ? _resizeW : m.tileW,
+          h: resizing ? _resizeH : m.tileH,
+          col: m.tileCol,
+          row: m.tileRow,
+        );
       }).toList();
       final layout = resolveTileLayout(specs);
       final rows = layout.rows;
@@ -253,11 +264,125 @@ class _TileBoardState extends State<_TileBoard> {
                     ),
                   );
                 }),
+              if (!page.locked)
+                for (final app in pins)
+                  Builder(builder: (context) {
+                    final p = layout.placements[app.packageName]!;
+                    return Positioned(
+                      left: x(p.col) + w(p.w) - _kHandleSize,
+                      top: y(p.row) + h(p.h) - _kHandleSize,
+                      width: _kHandleSize,
+                      height: _kHandleSize,
+                      child: _ResizeHandle(
+                        state: state,
+                        packageName: app.packageName,
+                        cellW: cellW,
+                        gap: _gap,
+                        onPreview: (pw, ph) => setState(() {
+                          _resizeId = app.packageName;
+                          _resizeW = pw;
+                          _resizeH = ph;
+                        }),
+                        onEnd: () {
+                          state.setTileSize(app.packageName, _resizeW, _resizeH);
+                          setState(() => _resizeId = null);
+                        },
+                      ),
+                    );
+                  }),
             ],
           ),
         ),
       );
     });
+  }
+}
+
+const double _kHandleSize = 24;
+
+/// A draggable bottom-right handle that resizes a tile directly on the board.
+class _ResizeHandle extends StatefulWidget {
+  const _ResizeHandle({
+    required this.state,
+    required this.packageName,
+    required this.cellW,
+    required this.gap,
+    required this.onPreview,
+    required this.onEnd,
+  });
+
+  final AppState state;
+  final String packageName;
+  final double cellW;
+  final double gap;
+  final void Function(int w, int h) onPreview;
+  final VoidCallback onEnd;
+
+  @override
+  State<_ResizeHandle> createState() => _ResizeHandleState();
+}
+
+class _ResizeHandleState extends State<_ResizeHandle> {
+  double _accX = 0;
+  double _accY = 0;
+  int _w = 1;
+  int _h = 1;
+  bool _dragging = false;
+
+  void _onStart(DragStartDetails _) {
+    final m = widget.state.metaFor(widget.packageName);
+    _w = m.tileW;
+    _h = m.tileH;
+    _accX = 0;
+    _accY = 0;
+    _dragging = true;
+  }
+
+  void _onUpdate(DragUpdateDetails d) {
+    final unit = widget.cellW + widget.gap;
+    _accX += d.delta.dx;
+    _accY += d.delta.dy;
+    final gw = (_w + (_accX / unit)).round().clamp(1, kTileCols);
+    final gh = (_h + (_accY / unit)).round().clamp(1, kTileMaxH);
+    if (gw != _w || gh != _h) {
+      setState(() {
+        _w = gw;
+        _h = gh;
+      });
+      widget.onPreview(gw, gh);
+    }
+  }
+
+  void _onEnd(DragEndDetails _) {
+    if (!_dragging) return;
+    _dragging = false;
+    widget.onEnd();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onPanStart: _onStart,
+      onPanUpdate: _onUpdate,
+      onPanEnd: _onEnd,
+      child: Align(
+        alignment: Alignment.bottomRight,
+        child: Container(
+          margin: const EdgeInsets.all(2),
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: _dragging ? 0.55 : 0.32),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Icon(
+            Icons.open_in_full,
+            size: 13,
+            color: Colors.white.withValues(alpha: 0.95),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -282,8 +407,6 @@ class _PageBar extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final pages = state.tilePages;
     if (pages.isEmpty) return const SizedBox.shrink();
-    final current = pages[currentIndex.clamp(0, pages.length - 1)];
-    final locked = current.locked;
 
     return Container(
       height: 54,
@@ -354,15 +477,6 @@ class _PageBar extends StatelessWidget {
                 );
               },
             ),
-          ),
-          IconButton(
-            tooltip: locked ? '解锁（可编辑磁贴）' : '锁定磁贴布局',
-            icon: Icon(locked ? Icons.lock : Icons.lock_open),
-            color: locked ? scheme.primary : null,
-            onPressed: () async {
-              await state.setTilePageLocked(current.id, !locked);
-              onChanged();
-            },
           ),
           IconButton(
             tooltip: '新建磁贴页',
