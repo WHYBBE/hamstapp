@@ -29,8 +29,6 @@ enum AppFilter {
 
 enum AppSort { name, installTime, updateTime, size }
 
-enum TileSort { name, recent, installTime, updateTime }
-
 class AppState extends ChangeNotifier {
   final Storage storage;
 
@@ -578,6 +576,9 @@ class AppState extends ChangeNotifier {
     for (final m in meta.values) {
       if (m.pinned && m.tilePageId == id) m.tilePageId = firstId;
     }
+    if (currentTilePageIndex >= tilePages.length) {
+      currentTilePageIndex = tilePages.length - 1;
+    }
     await _persistTilePages();
     await _persistMeta();
     notifyListeners();
@@ -663,56 +664,23 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Re-flow a page's tiles in [sort] order and persist the new positions.
-  Future<void> applyTileSort(String pageId, TileSort sort) async {
-    final page = tilePages.firstWhere((p) => p.id == pageId);
-    final list = pinsOnPage(page);
-    switch (sort) {
-      case TileSort.name:
-        list.sort((a, b) =>
-            a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
-        break;
-      case TileSort.recent:
-        list.sort((a, b) => metaFor(b.packageName)
-            .lastLaunchedAt
-            .compareTo(metaFor(a.packageName).lastLaunchedAt));
-        break;
-      case TileSort.installTime:
-        list.sort((a, b) => b.firstInstallTime.compareTo(a.firstInstallTime));
-        break;
-      case TileSort.updateTime:
-        list.sort((a, b) => b.lastUpdateTime.compareTo(a.lastUpdateTime));
-        break;
-    }
-
-    final specs = list.map((a) {
-      final m = metaFor(a.packageName);
-      return TileSpec(id: a.packageName, w: m.tileW, h: m.tileH);
-    }).toList();
-
-    final layout = resolveTileLayout(specs, ignoreStored: true);
-    for (final a in list) {
-      final m = metaFor(a.packageName);
-      final p = layout.placements[a.packageName];
-      if (p != null) {
-        m.tileCol = p.col;
-        m.tileRow = p.row;
-      }
-      if (m.tilePageId.isEmpty) m.tilePageId = page.id;
-    }
-    await _persistMeta();
+  /// Lock/unlock a tile page. A locked page cannot be rearranged.
+  Future<void> setTilePageLocked(String id, bool locked) async {
+    final page = tilePages.firstWhere((p) => p.id == id);
+    page.locked = locked;
+    await _persistTilePages();
     notifyListeners();
   }
 
-  /// Forget custom positions on a page; tiles auto-pack.
-  Future<void> resetTileLayout(String pageId) async {
-    final page = tilePages.firstWhere((p) => p.id == pageId);
-    for (final a in pinsOnPage(page)) {
-      final m = metaFor(a.packageName);
-      m.tileCol = -1;
-      m.tileRow = -1;
-    }
-    await _persistMeta();
+  /// Manually move a tile page (sub-tab) left/right by [delta].
+  Future<void> moveTilePage(int index, int delta) async {
+    final target = index + delta;
+    if (index < 0 || index >= tilePages.length) return;
+    if (target < 0 || target >= tilePages.length) return;
+    final page = tilePages.removeAt(index);
+    tilePages.insert(target, page);
+    currentTilePageIndex = target;
+    await _persistTilePages();
     notifyListeners();
   }
 

@@ -66,30 +66,6 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
     switch (_tabs.index) {
       case 0:
         return [
-          PopupMenuButton<String>(
-            tooltip: '排序磁贴',
-            icon: const Icon(Icons.sort),
-            onSelected: (v) {
-              final pages = state.tilePages;
-              if (pages.isEmpty) return;
-              final idx =
-                  state.currentTilePageIndex.clamp(0, pages.length - 1);
-              final pageId = pages[idx].id;
-              if (v == 'reset') {
-                state.resetTileLayout(pageId);
-              } else {
-                state.applyTileSort(pageId, _tileSortFrom(v));
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'name', child: Text('按名称')),
-              PopupMenuItem(value: 'recent', child: Text('按最近使用')),
-              PopupMenuItem(value: 'install', child: Text('按安装时间')),
-              PopupMenuItem(value: 'update', child: Text('按更新时间')),
-              PopupMenuDivider(),
-              PopupMenuItem(value: 'reset', child: Text('重置布局')),
-            ],
-          ),
           IconButton(
             tooltip: '置顶应用到磁贴',
             icon: const Icon(Icons.add),
@@ -107,19 +83,6 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
       default:
         return const [];
     }
-  }
-}
-
-TileSort _tileSortFrom(String v) {
-  switch (v) {
-    case 'recent':
-      return TileSort.recent;
-    case 'install':
-      return TileSort.installTime;
-    case 'update':
-      return TileSort.updateTime;
-    default:
-      return TileSort.name;
   }
 }
 
@@ -200,17 +163,13 @@ class _TilesTabState extends State<_TilesTab> {
             });
           },
           onChanged: () {
-            setState(() {
-              if (_index >= state.tilePages.length) {
-                _index = state.tilePages.length - 1;
-              }
-            });
-            widget.state.setCurrentTilePage(_index);
-            final target = _index;
+            final idx = state.currentTilePageIndex
+                .clamp(0, state.tilePages.isEmpty ? 0 : state.tilePages.length - 1);
+            setState(() => _index = idx);
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (_controller.hasClients &&
-                  (_controller.page?.round() ?? 0) != target) {
-                _controller.jumpToPage(target);
+                  (_controller.page?.round() ?? 0) != idx) {
+                _controller.jumpToPage(idx);
               }
             });
           },
@@ -290,6 +249,7 @@ class _TileBoardState extends State<_TileBoard> {
                       cellW: cellW,
                       gap: _gap,
                       pad: _pad,
+                      editable: !page.locked,
                     ),
                   );
                 }),
@@ -321,6 +281,10 @@ class _PageBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final pages = state.tilePages;
+    if (pages.isEmpty) return const SizedBox.shrink();
+    final current = pages[currentIndex.clamp(0, pages.length - 1)];
+    final locked = current.locked;
+
     return Container(
       height: 54,
       decoration: BoxDecoration(
@@ -337,11 +301,14 @@ class _PageBar extends StatelessWidget {
                 final page = pages[i];
                 final selected = i == currentIndex;
                 final count = state.pinCountOnPage(page);
+                final fg = selected
+                    ? scheme.onPrimaryContainer
+                    : scheme.onSurfaceVariant;
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                   child: GestureDetector(
                     onTap: () => onSelect(i),
-                    onLongPress: () => _pageMenu(context, state, page, onChanged),
+                    onLongPress: () => _pageMenu(context, state, i, onChanged),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -349,21 +316,27 @@ class _PageBar extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: selected
                             ? scheme.primaryContainer
-                            : scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                            : scheme.surfaceContainerHighest
+                                .withValues(alpha: 0.6),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (page.locked)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Icon(Icons.lock,
+                                  size: 12,
+                                  color: fg.withValues(alpha: 0.8)),
+                            ),
                           Text(
                             page.name,
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight:
                                   selected ? FontWeight.w700 : FontWeight.w500,
-                              color: selected
-                                  ? scheme.onPrimaryContainer
-                                  : scheme.onSurfaceVariant,
+                              color: fg,
                             ),
                           ),
                           const SizedBox(width: 5),
@@ -371,10 +344,7 @@ class _PageBar extends StatelessWidget {
                             '$count',
                             style: TextStyle(
                               fontSize: 11,
-                              color: (selected
-                                      ? scheme.onPrimaryContainer
-                                      : scheme.onSurfaceVariant)
-                                  .withValues(alpha: 0.7),
+                              color: fg.withValues(alpha: 0.7),
                             ),
                           ),
                         ],
@@ -384,6 +354,15 @@ class _PageBar extends StatelessWidget {
                 );
               },
             ),
+          ),
+          IconButton(
+            tooltip: locked ? '解锁（可编辑磁贴）' : '锁定磁贴布局',
+            icon: Icon(locked ? Icons.lock : Icons.lock_open),
+            color: locked ? scheme.primary : null,
+            onPressed: () async {
+              await state.setTilePageLocked(current.id, !locked);
+              onChanged();
+            },
           ),
           IconButton(
             tooltip: '新建磁贴页',
@@ -423,15 +402,67 @@ Future<TilePage?> _promptAddPage(BuildContext context, AppState state) async {
 void _pageMenu(
   BuildContext context,
   AppState state,
-  TilePage page,
+  int index,
   VoidCallback onChanged,
 ) {
+  final page = state.tilePages[index];
+  final canLeft = index > 0;
+  final canRight = index < state.tilePages.length - 1;
   showModalBottomSheet(
     context: context,
     builder: (ctx) => SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(page.name,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+                Text('第 ${index + 1} / ${state.tilePages.length} 页',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+              ],
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.arrow_back),
+            title: const Text('左移（手动排序）'),
+            enabled: canLeft,
+            onTap: canLeft
+                ? () async {
+                    Navigator.pop(ctx);
+                    await state.moveTilePage(index, -1);
+                    onChanged();
+                  }
+                : null,
+          ),
+          ListTile(
+            leading: const Icon(Icons.arrow_forward),
+            title: const Text('右移（手动排序）'),
+            enabled: canRight,
+            onTap: canRight
+                ? () async {
+                    Navigator.pop(ctx);
+                    await state.moveTilePage(index, 1);
+                    onChanged();
+                  }
+                : null,
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: Icon(page.locked ? Icons.lock_open : Icons.lock_outline),
+            title: Text(page.locked ? '解锁布局（编辑模式）' : '锁定布局（锁定模式）'),
+            subtitle: Text('当前：${page.locked ? '锁定模式' : '编辑模式'}'),
+            onTap: () async {
+              Navigator.pop(ctx);
+              await state.setTilePageLocked(page.id, !page.locked);
+              onChanged();
+            },
+          ),
           ListTile(
             leading: const Icon(Icons.drive_file_rename_outline),
             title: const Text('重命名页面'),
@@ -442,8 +473,7 @@ void _pageMenu(
                 context: context,
                 builder: (dctx) => AlertDialog(
                   title: const Text('重命名页面'),
-                  content:
-                      TextField(controller: controller, autofocus: true),
+                  content: TextField(controller: controller, autofocus: true),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(dctx),
@@ -487,6 +517,7 @@ class _Tile extends StatelessWidget {
     required this.cellW,
     required this.gap,
     required this.pad,
+    required this.editable,
   });
 
   final AppInfo app;
@@ -496,6 +527,7 @@ class _Tile extends StatelessWidget {
   final double cellW;
   final double gap;
   final double pad;
+  final bool editable;
 
   @override
   Widget build(BuildContext context) {
@@ -507,6 +539,8 @@ class _Tile extends StatelessWidget {
     final fontScale = (shortest / 56).clamp(0.85, 1.9);
 
     final content = _content(context, iconSize, fontScale);
+
+    if (!editable) return content;
 
     return LongPressDraggable<String>(
       data: app.packageName,
@@ -609,13 +643,24 @@ class _Tile extends StatelessWidget {
                   launchApp(context, app.packageName);
                 },
               ),
+              if (editable)
+                ListTile(
+                  leading: const Icon(Icons.aspect_ratio),
+                  title: const Text('调整尺寸'),
+                  subtitle:
+                      Text('当前 ${meta.tileW} × ${meta.tileH}（一行 $kTileCols 格）'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showSizePicker(context);
+                  },
+                ),
               ListTile(
-                leading: const Icon(Icons.aspect_ratio),
-                title: const Text('调整尺寸'),
-                subtitle: Text('当前 ${meta.tileW} × ${meta.tileH}（一行 $kTileCols 格）'),
+                leading: Icon(page.locked ? Icons.lock_open : Icons.lock_outline),
+                title: Text(page.locked ? '解锁布局（可编辑）' : '锁定布局'),
+                subtitle: Text('当前：${page.locked ? '锁定模式' : '编辑模式'}'),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _showSizePicker(context);
+                  state.setTilePageLocked(page.id, !page.locked);
                 },
               ),
               ListTile(
