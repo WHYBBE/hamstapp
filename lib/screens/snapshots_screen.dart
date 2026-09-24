@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/snapshot.dart';
 import '../state/app_state.dart';
+import '../utils/backup_actions.dart';
 import '../utils/format.dart';
 import 'compare_screen.dart';
 
@@ -33,6 +34,43 @@ class SnapshotsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('快照对比',
             style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          PopupMenuButton<String>(
+            tooltip: '数据备份',
+            icon: const Icon(Icons.more_vert),
+            onSelected: (v) {
+              switch (v) {
+                case 'export':
+                  exportData(context, state);
+                  break;
+                case 'import':
+                  importData(context, state);
+                  break;
+                case 'clear':
+                  clearData(context, state);
+                  break;
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'export',
+                child: _MenuRow(
+                    icon: Icons.upload_file_outlined, text: '导出数据包'),
+              ),
+              PopupMenuItem(
+                value: 'import',
+                child: _MenuRow(
+                    icon: Icons.download_outlined, text: '导入数据包'),
+              ),
+              PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'clear',
+                child: _MenuRow(
+                    icon: Icons.delete_forever_outlined, text: '清空数据'),
+              ),
+            ],
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _create(context, state),
@@ -266,6 +304,23 @@ class SnapshotsScreen extends StatelessWidget {
           newer: newer,
         ),
       ),
+    );
+  }
+}
+
+class _MenuRow extends StatelessWidget {
+  const _MenuRow({required this.icon, required this.text});
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 20),
+        const SizedBox(width: 12),
+        Text(text),
+      ],
     );
   }
 }
