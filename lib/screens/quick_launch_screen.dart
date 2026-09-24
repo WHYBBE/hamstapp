@@ -863,8 +863,11 @@ class _Tile extends StatelessWidget {
           final w = constraints.maxWidth;
           final h = constraints.maxHeight;
           final shortest = w < h ? w : h;
-          final pad = (shortest * 0.07).clamp(3.0, 9.0).toDouble();
+          final pad = (shortest * 0.07).clamp(3.0, 18.0).toDouble();
           final showLabel = h > 46;
+          // Multi-cell tiles get a slightly smaller icon so it does not look
+          // oversized; 1xN tiles keep filling the space.
+          final iconScale = (tile.w >= 2 && tile.h >= 2) ? 0.8 : 1.0;
 
           if (!showLabel) {
             return Padding(
@@ -887,9 +890,10 @@ class _Tile extends StatelessWidget {
               children: [
                 Expanded(
                   child: LayoutBuilder(builder: (context, inner) {
-                    final side = inner.maxWidth < inner.maxHeight
+                    var side = inner.maxWidth < inner.maxHeight
                         ? inner.maxWidth
                         : inner.maxHeight;
+                    side *= iconScale;
                     return Center(
                       child: AppIcon(
                         packageName: app.packageName,
