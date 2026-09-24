@@ -157,7 +157,8 @@ void showPinSheet(BuildContext context, AppState state) {
                           color: pinned ? Colors.orange : Colors.grey,
                         ),
                         onTap: () {
-                          state.togglePinned(app.packageName);
+                          state.togglePinned(app.packageName,
+                              pageId: state.currentTilePageId);
                           setLocal(() {});
                         },
                       );

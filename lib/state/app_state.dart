@@ -86,6 +86,19 @@ class AppState extends ChangeNotifier {
       ));
       await _persistTilePages();
     }
+    // Bind legacy pins (no/unknown page) to the first page so they follow that
+    // page when it is reordered instead of always showing on the first slot.
+    final firstPageId = tilePages.first.id;
+    final validPageIds = tilePages.map((p) => p.id).toSet();
+    var metaChanged = false;
+    for (final m in meta.values) {
+      if (m.pinned &&
+          (m.tilePageId.isEmpty || !validPageIds.contains(m.tilePageId))) {
+        m.tilePageId = firstPageId;
+        metaChanged = true;
+      }
+    }
+    if (metaChanged) await _persistMeta();
     final cached = await storage.readJson(_kAppsCache);
     if (cached is List) {
       apps = cached
@@ -816,11 +829,26 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> togglePinned(String packageName) async {
+  Future<void> togglePinned(String packageName, {String? pageId}) async {
     final m = metaFor(packageName);
     m.pinned = !m.pinned;
+    if (m.pinned) {
+      // Bind freshly pinned apps to a concrete page so they move together with
+      // that page when its position changes (otherwise they would always fall
+      // back to whichever page happens to be first).
+      m.tilePageId = pageId ?? currentTilePageId ?? tilePages.first.id;
+    } else {
+      m.tilePageId = '';
+    }
     await _persistMeta();
     notifyListeners();
+  }
+
+  /// Id of the currently visible tile page, or null when none exist.
+  String? get currentTilePageId {
+    if (tilePages.isEmpty) return null;
+    final i = currentTilePageIndex.clamp(0, tilePages.length - 1);
+    return tilePages[i].id;
   }
 
   AppInfo? appByPackage(String packageName) {
