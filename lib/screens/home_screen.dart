@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../widgets/uninstall_reason.dart';
 import 'apps_screen.dart';
-import 'backup_lists_screen.dart';
 import 'quick_launch_screen.dart';
 import 'settings_screen.dart';
 import 'snapshots_screen.dart';
@@ -48,7 +47,6 @@ class _HomeScreenState extends State<HomeScreen> {
       QuickLaunchScreen(),
       AppsScreen(),
       SnapshotsScreen(),
-      BackupListsScreen(),
       SettingsScreen(),
     ];
 
@@ -69,25 +67,25 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         destinations: const [
           NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
-              label: '首页'),
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: '首页',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.apps_outlined),
-              selectedIcon: Icon(Icons.apps),
-              label: '应用'),
+            icon: Icon(Icons.apps_outlined),
+            selectedIcon: Icon(Icons.apps),
+            label: '应用',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.compare_arrows_outlined),
-              selectedIcon: Icon(Icons.compare_arrows),
-              label: '快照'),
+            icon: Icon(Icons.compare_arrows_outlined),
+            selectedIcon: Icon(Icons.compare_arrows),
+            label: '快照',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.inventory_2_outlined),
-              selectedIcon: Icon(Icons.inventory_2),
-              label: '备份'),
-          NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings),
-              label: '设置'),
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: '设置',
+          ),
         ],
       ),
     );

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../services/native_apps.dart';
 import '../state/app_state.dart';
+import '../utils/backup_actions.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -52,6 +53,29 @@ class SettingsScreen extends StatelessWidget {
                 DropdownMenuItem(value: 4, child: Text('4×4')),
               ],
             ),
+          ),
+          const Divider(height: 1),
+          const _SectionHeader('数据备份'),
+          ListTile(
+            leading: const Icon(Icons.upload_file_outlined),
+            title: const Text('导出数据包'),
+            subtitle: const Text('把快照、磁贴、分组、备份列表等全部数据打包为单个文件'),
+            onTap: () => exportData(context, state),
+          ),
+          ListTile(
+            leading: const Icon(Icons.download_outlined),
+            title: const Text('导入数据包'),
+            subtitle: const Text('先清空当前数据，再完整导入（不支持部分导入）'),
+            onTap: () => importData(context, state),
+          ),
+          ListTile(
+            leading: Icon(
+              Icons.delete_forever_outlined,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            title: const Text('清空数据'),
+            subtitle: const Text('删除全部本地数据，无法恢复'),
+            onTap: () => clearData(context, state),
           ),
           const Divider(height: 1),
           const _SectionHeader('关于'),
