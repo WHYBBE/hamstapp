@@ -384,7 +384,6 @@ class _TileBoardState extends State<_TileBoard> {
                       tile: t,
                       app: app,
                       state: state,
-                      page: page,
                       cellW: cellW,
                       gap: _gap,
                       editable: editable,
@@ -803,7 +802,6 @@ class _Tile extends StatelessWidget {
     required this.tile,
     required this.app,
     required this.state,
-    required this.page,
     required this.cellW,
     required this.gap,
     required this.editable,
@@ -816,7 +814,6 @@ class _Tile extends StatelessWidget {
   final Tile tile;
   final AppInfo app;
   final AppState state;
-  final TilePage page;
   final double cellW;
   final double gap;
   final bool editable;
@@ -862,7 +859,10 @@ class _Tile extends StatelessWidget {
       borderRadius: BorderRadius.circular(10),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: editable ? null : () => launchApp(context, app.packageName),
+        onTap: editable
+            ? () => _showTileMenu(context)
+            : () => launchApp(context, app.packageName),
+        onLongPress: editable ? null : () => _showTileMenu(context),
         child: Stack(
           children: [
             Positioned(
@@ -915,23 +915,9 @@ class _Tile extends StatelessWidget {
       );
     }
 
-    return Stack(
-      children: [
-        Positioned.fill(child: tappable),
-        Positioned(
-          top: 0,
-          right: 0,
-          child: InkWell(
-            onTap: () => _showTileMenu(context),
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: Icon(Icons.more_vert,
-                  size: 16, color: Colors.white.withValues(alpha: 0.85)),
-            ),
-          ),
-        ),
-      ],
-    );
+    // No visible overflow button: the menu is opened by long-pressing (browse
+    // mode) or tapping (edit mode).
+    return tappable;
   }
 
   Widget _feedback(double width, double height, Widget child) {
@@ -959,14 +945,6 @@ class _Tile extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.rocket_launch_outlined),
-                title: const Text('启动'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  launchApp(context, app.packageName);
-                },
-              ),
-              ListTile(
                 leading: const Icon(Icons.info_outline),
                 title: const Text('应用详情'),
                 onTap: () {
@@ -981,23 +959,6 @@ class _Tile extends StatelessWidget {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.content_copy_outlined),
-                title: const Text('再添加一个到本页'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  state.addTile(app.packageName, pageId: page.id);
-                },
-              ),
-              if (state.tilePages.length > 1)
-                ListTile(
-                  leading: const Icon(Icons.drive_file_move_outline),
-                  title: const Text('移动到页面…'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _moveToPage(context);
-                  },
-                ),
-              ListTile(
                 leading: const Icon(Icons.push_pin_outlined),
                 title: const Text('移除该磁贴'),
                 onTap: () {
@@ -1010,36 +971,6 @@ class _Tile extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _moveToPage(BuildContext context) async {
-    final others =
-        state.tilePages.where((p) => p.id != page.id).toList();
-    final target = await showModalBottomSheet<TilePage>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Text('移动到',
-                  style:
-                      TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            ),
-            ...others.map((p) => ListTile(
-                  leading: const Icon(Icons.grid_view_rounded),
-                  title: Text(p.name),
-                  trailing: Text('${state.pinCountOnPage(p)}'),
-                  onTap: () => Navigator.pop(ctx, p),
-                )),
-          ],
-        ),
-      ),
-    );
-    if (target != null) {
-      await state.assignTileToPage(tile.id, target.id);
-    }
   }
 
   Color _tileColor(String label) {
