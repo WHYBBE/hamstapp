@@ -242,6 +242,21 @@ void main() {
     expect(state.pinCountOnPage(state.tilePages[1]), 2);
   });
 
+  test('new tiles default to 2x2 and follow the setting', () async {
+    final state = AppState(_MemStorage());
+    state.tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)];
+    state.apps = [_ai('com.x', 'X')];
+
+    final t = await state.addTile('com.x');
+    expect(t.w, 2);
+    expect(t.h, 2);
+
+    await state.setTileDefaultSize(3);
+    final t2 = await state.addTile('com.x');
+    expect(t2.w, 3);
+    expect(t2.h, 3);
+  });
+
   test('removing one duplicate keeps the others', () async {
     final state = AppState(_MemStorage());
     state.tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)];

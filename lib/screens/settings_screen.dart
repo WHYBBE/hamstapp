@@ -31,6 +31,29 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
+          const _SectionHeader('磁贴'),
+          ListTile(
+            leading: const Icon(Icons.grid_view_rounded),
+            title: const Text('新增磁贴默认大小'),
+            subtitle: Text(
+              '当前 ${state.tileDefaultSize}×${state.tileDefaultSize}，'
+              '置顶新应用时使用',
+            ),
+            trailing: DropdownButton<int>(
+              value: state.tileDefaultSize,
+              underline: const SizedBox.shrink(),
+              onChanged: (v) {
+                if (v != null) state.setTileDefaultSize(v);
+              },
+              items: const [
+                DropdownMenuItem(value: 1, child: Text('1×1')),
+                DropdownMenuItem(value: 2, child: Text('2×2')),
+                DropdownMenuItem(value: 3, child: Text('3×3')),
+                DropdownMenuItem(value: 4, child: Text('4×4')),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
           const _SectionHeader('关于'),
           const ListTile(
             leading: Icon(Icons.pets),

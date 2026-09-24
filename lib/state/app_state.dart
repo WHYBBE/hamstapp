@@ -642,10 +642,13 @@ class AppState extends ChangeNotifier {
     final target = pageId ??
         currentTilePageId ??
         (tilePages.isEmpty ? '' : tilePages.first.id);
+    final size = tileDefaultSize;
     final tile = Tile(
       id: _newId(),
       packageName: packageName,
       pageId: target,
+      w: size,
+      h: size,
     );
     tiles.add(tile);
     metaFor(packageName).pinned = true;
@@ -831,6 +834,17 @@ class AppState extends ChangeNotifier {
     settings['show_system_status_bar'] = value;
     await _persistSettings();
     await applyStatusBarVisibility(value);
+    notifyListeners();
+  }
+
+  /// Default side length (in grid cells) for newly added tiles. Defaults to 2,
+  /// i.e. a 2x2 tile.
+  int get tileDefaultSize =>
+      (settings['tile_default_size'] as num?)?.toInt() ?? 2;
+
+  Future<void> setTileDefaultSize(int value) async {
+    settings['tile_default_size'] = value.clamp(1, kTileMaxH);
+    await _persistSettings();
     notifyListeners();
   }
 
