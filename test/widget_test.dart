@@ -10,6 +10,7 @@ import 'package:hamstapp/models/snapshot.dart';
 import 'package:hamstapp/models/snapshot_diff.dart';
 import 'package:hamstapp/models/tile.dart';
 import 'package:hamstapp/models/tile_page.dart';
+import 'package:hamstapp/services/remote_client.dart';
 import 'package:hamstapp/services/storage.dart';
 import 'package:hamstapp/state/app_state.dart';
 import 'package:hamstapp/utils/search.dart';
@@ -388,6 +389,48 @@ void main() {
     await fresh.importPackage(pkg);
     expect(fresh.remoteSource.path, 'share/apks');
     expect(fresh.remoteSource.anonymous, isFalse);
+  });
+
+  test('webdav listing parses apk entries', () {
+    const xml = '''
+<?xml version="1.0"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/apks/</D:href>
+    <D:propstat><D:prop>
+      <D:resourcetype><D:collection/></D:resourcetype>
+    </D:prop></D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/apks/com.example.app-1.2.3.apk</D:href>
+    <D:propstat><D:prop>
+      <D:getcontentlength>123456</D:getcontentlength>
+      <D:getlastmodified>Wed, 21 Oct 2015 07:28:00 GMT</D:getlastmodified>
+    </D:prop></D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/apks/notes.txt</D:href>
+    <D:propstat><D:prop>
+      <D:getcontentlength>10</D:getcontentlength>
+    </D:prop></D:propstat>
+  </D:response>
+</D:multistatus>
+''';
+    final list = RemoteClient.parseWebdavListing(xml);
+    expect(list.length, 1);
+    expect(list.single['name'], 'com.example.app-1.2.3.apk');
+    expect(list.single['size'], 123456);
+    expect(list.single['modified'], isNot(0));
+  });
+
+  test('webdav listing handles namespace-less hrefs', () {
+    const xml = '<multistatus><response>'
+        '<href>/dav/%E5%BA%94%E7%94%A8.apk</href>'
+        '<getcontentlength>5</getcontentlength>'
+        '</response></multistatus>';
+    final list = RemoteClient.parseWebdavListing(xml);
+    expect(list.single['name'], '应用.apk');
+    expect(list.single['size'], 5);
   });
 
   test('RemoteSource.fromMap defaults are sane', () {

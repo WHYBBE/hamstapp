@@ -109,12 +109,7 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
                         }
                     } catch (t: Throwable) {
                         mainHandler.post {
-                            result.success(
-                                mapOf(
-                                    "ok" to false,
-                                    "error" to (t.message ?: t.toString())
-                                )
-                            )
+                            result.success(mapOf("ok" to false, "error" to describe(t)))
                         }
                     }
                 }
@@ -127,7 +122,7 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
                         mainHandler.post { result.success(list) }
                     } catch (t: Throwable) {
                         mainHandler.post {
-                            result.error("REMOTE_FAILED", t.message ?: t.toString(), null)
+                            result.error("REMOTE_FAILED", describe(t), null)
                         }
                     }
                 }
@@ -242,6 +237,18 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
     private fun boolArg(m: Map<*, *>, key: String): Boolean =
         m[key] as? Boolean ?: false
 
+    /** First non-blank message in the cause chain, for a useful error toast. */
+    private fun describe(t: Throwable): String {
+        var cur: Throwable? = t
+        val seen = HashSet<Throwable>()
+        while (cur != null && seen.add(cur)) {
+            val m = cur.message
+            if (!m.isNullOrBlank()) return m
+            cur = cur.cause?.takeIf { it !== cur }
+        }
+        return t.javaClass.simpleName
+    }
+
     /** Lists `.apk` files from an FTP or SMB (Samba) source. */
     private fun listRemoteApks(config: Map<*, *>): List<Map<String, Any?>> {
         val protocol = strArg(config, "protocol", "ftp").lowercase()
@@ -305,14 +312,30 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
         require(path.isNotEmpty()) { "请填写共享路径，例如 share/apks" }
 
         val props = Properties()
+        // Resolve hostnames with DNS only: WINS/NetBIOS broadcast lookups are
+        // what usually makes SMB "hang" then fail on Android.
+        props.setProperty("jcifs.resolveOrder", "DNS")
+        // Support old SMB1-only NAS through SMB 3.1.1.
+        props.setProperty("jcifs.smb.client.minVersion", "SMB1")
+        props.setProperty("jcifs.smb.client.maxVersion", "SMB311")
+        // Bound the connection so a wrong host/port fails fast instead of hanging.
+        props.setProperty("jcifs.smb.client.connTimeout", "15000")
+        props.setProperty("jcifs.smb.client.responseTimeout", "30000")
+        props.setProperty("jcifs.smb.client.soTimeout", "35000")
+        props.setProperty("jcifs.smb.client.dfs.disabled", "true")
         if (port != 445) props.setProperty("jcifs.smb.client.port", port.toString())
+
         val base = BaseContext(PropertyConfiguration(props))
         val ctx: CIFSContext = if (anonymous) {
             base.withAnonymousCredentials()
         } else {
             base.withCredentials(NtlmPasswordAuthenticator("", user, pass))
         }
-        val dir = SmbFile("smb://$host/$path/", ctx)
+        val portPart = if (port != 445) ":$port" else ""
+        val dir = SmbFile("smb://$host$portPart/$path/", ctx)
+        if (!dir.exists()) {
+            throw IllegalStateException("无法访问共享 $path（$host$portPart），请检查路径与权限")
+        }
         val children = dir.listFiles() ?: emptyArray<SmbFile>()
         val out = ArrayList<Map<String, Any?>>()
         for (f in children) {

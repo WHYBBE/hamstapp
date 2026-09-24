@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/app_info.dart';
 import '../models/remote_source.dart';
-import '../services/native_apps.dart';
+import '../services/remote_client.dart';
 import '../state/app_state.dart';
 import '../utils/format.dart';
 import '../widgets/app_icon.dart';
@@ -24,19 +24,22 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
   late final TextEditingController _username;
   late final TextEditingController _password;
   late bool _anonymous;
+  late bool _secure;
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     final s = context.read<AppState>().remoteSource;
-    _protocol = s.protocol;
+    // Normalise legacy/unknown protocol values so the segmented control is valid.
+    _protocol = s.isSmb ? 'smb' : (s.isWebdav ? 'webdav' : 'ftp');
     _host = TextEditingController(text: s.host);
     _port = TextEditingController(text: s.port.toString());
     _path = TextEditingController(text: s.path);
     _username = TextEditingController(text: s.username);
     _password = TextEditingController(text: s.password);
     _anonymous = s.anonymous;
+    _secure = s.secure;
   }
 
   @override
@@ -53,11 +56,12 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
         protocol: _protocol,
         host: _host.text.trim(),
         port: int.tryParse(_port.text.trim()) ??
-            RemoteSource.defaultPort(_protocol),
+            RemoteSource.defaultPort(_protocol, secure: _secure),
         path: _path.text.trim(),
         username: _username.text,
         password: _password.text,
         anonymous: _anonymous,
+        secure: _secure,
       );
 
   void _snack(String msg) {
@@ -69,10 +73,20 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
   void _onProtocolChanged(String p) {
     setState(() {
       if (_port.text.trim() ==
-          RemoteSource.defaultPort(_protocol).toString()) {
-        _port.text = RemoteSource.defaultPort(p).toString();
+          RemoteSource.defaultPort(_protocol, secure: _secure).toString()) {
+        _port.text = RemoteSource.defaultPort(p, secure: _secure).toString();
       }
       _protocol = p;
+    });
+  }
+
+  void _onSecureChanged(bool v) {
+    setState(() {
+      if (_port.text.trim() ==
+          RemoteSource.defaultPort(_protocol, secure: _secure).toString()) {
+        _port.text = RemoteSource.defaultPort(_protocol, secure: v).toString();
+      }
+      _secure = v;
     });
   }
 
@@ -90,7 +104,7 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
     }
     setState(() => _busy = true);
     try {
-      final r = await NativeApps.remoteTest(cfg.toChannelArgs());
+      final r = await RemoteClient.test(cfg);
       final ok = r['ok'] == true;
       _snack(ok ? '连接成功，发现 ${r['count']} 个 APK' : '连接失败：${r['error'] ?? '未知错误'}');
     } catch (e) {
@@ -109,7 +123,7 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
     }
     setState(() => _busy = true);
     try {
-      final files = await NativeApps.remoteList(cfg.toChannelArgs());
+      final files = await RemoteClient.list(cfg);
       await state.setRemoteSource(cfg);
       if (!mounted) return;
       if (files.isEmpty) {
@@ -227,15 +241,16 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
-          const Text('连接局域网 / NAS 上的 FTP 或 Samba 共享，'
+          const Text('连接局域网 / NAS 上的 FTP、Samba 或 WebDAV，'
               '读取其中的 APK 列表用于更新软件。配置会被记住。'),
           const SizedBox(height: 16),
           SegmentedButton<String>(
             segments: const [
               ButtonSegment(value: 'ftp', label: Text('FTP')),
-              ButtonSegment(value: 'smb', label: Text('Samba (SMB)')),
+              ButtonSegment(value: 'smb', label: Text('Samba')),
+              ButtonSegment(value: 'webdav', label: Text('WebDAV')),
             ],
-            selected: {_protocol == 'smb' ? 'smb' : 'ftp'},
+            selected: {_protocol},
             onSelectionChanged: (v) => _onProtocolChanged(v.first),
           ),
           const SizedBox(height: 16),
@@ -253,7 +268,8 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
             keyboardType: TextInputType.number,
             decoration: InputDecoration(
               labelText: '端口',
-              helperText: _protocol == 'smb' ? '默认 445' : '默认 21',
+              helperText:
+                  '默认 ${RemoteSource.defaultPort(_protocol, secure: _secure)}',
               border: const OutlineInputBorder(),
             ),
           ),
@@ -262,18 +278,26 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
             controller: _path,
             decoration: InputDecoration(
               labelText: _protocol == 'smb' ? '共享路径' : '远程目录',
-              hintText:
-                  _protocol == 'smb' ? 'share/apks' : '/apks',
+              hintText: _protocol == 'smb' ? 'share/apks' : '/apks',
               border: const OutlineInputBorder(),
             ),
           ),
+          if (_protocol == 'webdav') ...[
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _secure,
+              onChanged: _onSecureChanged,
+              title: const Text('使用 HTTPS'),
+              subtitle: const Text('WebDAV over TLS'),
+            ),
+          ],
           const SizedBox(height: 8),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _anonymous,
             onChanged: (v) => setState(() => _anonymous = v),
             title: const Text('匿名登录'),
-            subtitle: const Text('无需账号密码（FTP anonymous / SMB 来宾）'),
+            subtitle: const Text('无需账号密码（FTP anonymous / SMB 来宾 / WebDAV 无鉴权）'),
           ),
           if (!_anonymous) ...[
             TextField(
