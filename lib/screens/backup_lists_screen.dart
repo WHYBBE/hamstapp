@@ -5,6 +5,7 @@ import '../models/app_info.dart';
 import '../models/backup_list.dart';
 import '../state/app_state.dart';
 import '../utils/format.dart';
+import '../utils/search.dart';
 import '../widgets/app_icon.dart';
 import '../widgets/app_tile.dart';
 import '../widgets/uninstall_reason.dart';
@@ -300,16 +301,13 @@ class BackupListDetailScreen extends StatelessWidget {
         var query = '';
         return StatefulBuilder(
           builder: (ctx, setLocal) {
-            final apps = state.apps
-                .where((a) =>
-                    !list.packageNames.contains(a.packageName) &&
-                    (query.isEmpty ||
-                        a.appName.toLowerCase().contains(query.toLowerCase()) ||
-                        a.packageName
-                            .toLowerCase()
-                            .contains(query.toLowerCase())))
-                .take(100)
-                .toList();
+            final apps = AppSearch.rank(
+              state.apps
+                  .where((a) => !list.packageNames.contains(a.packageName))
+                  .toList(),
+              query,
+              limit: 100,
+            );
             return DraggableScrollableSheet(
               expand: false,
               initialChildSize: 0.75,

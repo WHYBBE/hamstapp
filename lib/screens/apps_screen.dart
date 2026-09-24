@@ -159,7 +159,7 @@ class _SearchBarState extends State<_SearchBar> {
                 widget.state.refresh();
               },
               decoration: InputDecoration(
-                hintText: '搜索应用名 / 包名',
+                hintText: '搜索应用名 / 包名 / 拼音首字母',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _controller.text.isEmpty
                     ? null

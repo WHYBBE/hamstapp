@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/category.dart';
 import '../state/app_state.dart';
+import '../utils/search.dart';
 import '../widgets/app_icon.dart';
 import '../widgets/category_editor.dart';
 import 'app_detail_screen.dart';
@@ -99,13 +100,7 @@ void showPinSheet(BuildContext context, AppState state) {
       var query = '';
       return StatefulBuilder(
         builder: (ctx, setLocal) {
-          final apps = state.apps
-              .where((a) =>
-                  query.isEmpty ||
-                  a.appName.toLowerCase().contains(query.toLowerCase()) ||
-                  a.packageName.toLowerCase().contains(query.toLowerCase()))
-              .take(150)
-              .toList();
+          final apps = AppSearch.rank(state.apps, query, limit: 150);
           return DraggableScrollableSheet(
             expand: false,
             initialChildSize: 0.8,

@@ -9,6 +9,7 @@ import '../models/tile_page.dart';
 import '../state/app_state.dart';
 import '../utils/actions.dart';
 import '../utils/format.dart';
+import '../utils/search.dart';
 import '../utils/tile_layout.dart';
 import '../widgets/app_icon.dart';
 import '../widgets/category_editor.dart';
@@ -1068,12 +1069,7 @@ class _FavoritesTabState extends State<_FavoritesTab> {
 
     final results = _query.trim().isEmpty
         ? <AppInfo>[]
-        : state.apps
-            .where((a) =>
-                a.appName.toLowerCase().contains(_query.toLowerCase()) ||
-                a.packageName.toLowerCase().contains(_query.toLowerCase()))
-            .take(12)
-            .toList();
+        : AppSearch.rank(state.apps, _query, limit: 12);
 
     return Column(
       children: [

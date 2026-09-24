@@ -9,6 +9,7 @@ import 'package:hamstapp/models/tile.dart';
 import 'package:hamstapp/models/tile_page.dart';
 import 'package:hamstapp/services/storage.dart';
 import 'package:hamstapp/state/app_state.dart';
+import 'package:hamstapp/utils/search.dart';
 import 'package:hamstapp/utils/tile_layout.dart';
 
 class _MemStorage implements Storage {
@@ -275,6 +276,39 @@ void main() {
         state.tilesOnPage(state.tilePages[0]).map((t) => t.packageName);
     expect(onFirst, contains('com.b'));
     expect(onFirst, isNot(contains('com.a')));
+  });
+
+  test('search matches pinyin initials and full pinyin', () {
+    expect(AppSearch.score('com.tencent.mm', '微信', 'wx'), isNotNull);
+    expect(AppSearch.score('com.tencent.mm', '微信', 'weixin'), isNotNull);
+    expect(AppSearch.score('com.tencent.mm', '微信', 'w'), isNotNull);
+    expect(AppSearch.score('com.tencent.mm', '微信', 'zzz'), isNull);
+  });
+
+  test('search falls back to fuzzy subsequence', () {
+    // "gmap" should fuzzily match "Google Maps".
+    expect(AppSearch.score('com.google.maps', 'Google Maps', 'gmap'), isNotNull);
+    // Contiguous prefix should outrank a scattered subsequence.
+    final prefix = AppSearch.score('a', 'Maps', 'map')!;
+    final fuzzy = AppSearch.score('a', 'Maps', 'mps')!;
+    expect(prefix, greaterThan(fuzzy));
+  });
+
+  test('search supports multi-token queries and empty query', () {
+    expect(AppSearch.score('com.a', 'Google Maps', 'google maps'), isNotNull);
+    expect(AppSearch.score('com.a', 'Google Maps', 'maps google'), isNotNull);
+    expect(AppSearch.score('com.a', 'Google Maps', 'google zzz'), isNull);
+    expect(AppSearch.score('com.a', '任意', ''), 0);
+  });
+
+  test('rank orders the best match first', () {
+    final apps = [
+      _ai('com.x', '支付宝'),
+      _ai('com.y', '微信'),
+      _ai('com.z', 'Wechat'),
+    ];
+    final ranked = AppSearch.rank(apps, 'wx');
+    expect(ranked.first.packageName, 'com.y');
   });
 
   test('legacy pinned meta migrates into a tile on load', () async {

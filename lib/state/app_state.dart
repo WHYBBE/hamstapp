@@ -12,6 +12,7 @@ import '../models/tile_page.dart';
 import '../services/native_apps.dart';
 import '../services/storage.dart';
 import '../utils/format.dart';
+import '../utils/search.dart';
 import '../utils/system_ui.dart';
 import '../utils/tile_layout.dart';
 
@@ -858,8 +859,9 @@ class AppState extends ChangeNotifier {
   // ---------------------------------------------------------------- filtering
 
   List<AppInfo> get visibleApps {
-    final q = query.trim().toLowerCase();
-    var list = apps.where((app) {
+    final q = query.trim();
+    final scores = <String, int>{};
+    final list = apps.where((app) {
       switch (scope) {
         case AppScope.user:
           if (app.isSystem) return false;
@@ -902,14 +904,22 @@ class AppState extends ChangeNotifier {
           return false;
         }
       }
-      if (q.isNotEmpty) {
-        if (!app.appName.toLowerCase().contains(q) &&
-            !app.packageName.toLowerCase().contains(q)) {
-          return false;
-        }
-      }
+      final score = AppSearch.score(app.packageName, app.appName, q);
+      if (score == null) return false;
+      if (q.isNotEmpty) scores[app.packageName] = score;
       return true;
     }).toList();
+
+    // While searching, rank by relevance rather than the selected sort order.
+    if (q.isNotEmpty) {
+      list.sort((a, b) {
+        final c =
+            (scores[b.packageName] ?? 0).compareTo(scores[a.packageName] ?? 0);
+        if (c != 0) return c;
+        return a.appName.toLowerCase().compareTo(b.appName.toLowerCase());
+      });
+      return list;
+    }
 
     switch (sort) {
       case AppSort.name:
