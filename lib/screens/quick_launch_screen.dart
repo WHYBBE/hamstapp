@@ -826,11 +826,8 @@ class _Tile extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = tile.w * cellW + (tile.w - 1) * gap;
     final height = tile.h * cellW + (tile.h - 1) * gap;
-    final shortest = width < height ? width : height;
-    final iconSize = (shortest * 0.42).clamp(24.0, 96.0);
-    final fontScale = (shortest / 56).clamp(0.85, 1.9);
 
-    final content = _content(context, iconSize, fontScale, editable);
+    final content = _content(context, editable);
 
     if (!editable) return content;
 
@@ -851,8 +848,7 @@ class _Tile extends StatelessWidget {
     );
   }
 
-  Widget _content(
-      BuildContext context, double iconSize, double fontScale, bool editable) {
+  Widget _content(BuildContext context, bool editable) {
     final color = _tileColor(app.appName);
     final tappable = Material(
       color: color,
@@ -863,35 +859,63 @@ class _Tile extends StatelessWidget {
             ? () => _showTileMenu(context)
             : () => launchApp(context, app.packageName),
         onLongPress: editable ? null : () => _showTileMenu(context),
-        child: Stack(
-          children: [
-            Positioned(
-              left: 10,
-              top: 10,
-              right: 26,
-              child: AppIcon(
-                packageName: app.packageName,
-                label: app.appName,
-                size: iconSize,
-              ),
-            ),
-            Positioned(
-              left: 10,
-              right: 8,
-              bottom: 8,
-              child: Text(
-                app.appName,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: (12 * fontScale).clamp(11.0, 20.0),
-                  fontWeight: FontWeight.w600,
+        child: LayoutBuilder(builder: (context, constraints) {
+          final w = constraints.maxWidth;
+          final h = constraints.maxHeight;
+          final shortest = w < h ? w : h;
+          final pad = (shortest * 0.07).clamp(3.0, 9.0).toDouble();
+          final showLabel = h > 46;
+
+          if (!showLabel) {
+            return Padding(
+              padding: EdgeInsets.all(pad),
+              child: Center(
+                child: AppIcon(
+                  packageName: app.packageName,
+                  label: app.appName,
+                  size: (shortest - pad * 2).clamp(8.0, double.infinity).toDouble(),
                 ),
               ),
+            );
+          }
+
+          final maxLines = h >= 120 ? 2 : 1;
+          final fontSize = (shortest * 0.15).clamp(10.0, 16.0).toDouble();
+          return Padding(
+            padding: EdgeInsets.all(pad),
+            child: Column(
+              children: [
+                Expanded(
+                  child: LayoutBuilder(builder: (context, inner) {
+                    final side = inner.maxWidth < inner.maxHeight
+                        ? inner.maxWidth
+                        : inner.maxHeight;
+                    return Center(
+                      child: AppIcon(
+                        packageName: app.packageName,
+                        label: app.appName,
+                        size: side.clamp(8.0, double.infinity).toDouble(),
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  app.appName,
+                  maxLines: maxLines,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.w600,
+                    height: 1.1,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        }),
       ),
     );
     if (editable) {
