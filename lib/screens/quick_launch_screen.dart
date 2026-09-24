@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app_info.dart';
+import '../models/tile.dart';
 import '../models/tile_page.dart';
 import '../state/app_state.dart';
 import '../utils/actions.dart';
@@ -96,7 +97,7 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
             icon: const Icon(Icons.edit_outlined),
             onPressed: () {
               final pages = state.tilePages;
-              if (pages.isEmpty || state.pinsOnPage(pages[state.currentTilePageIndex.clamp(0, pages.length - 1)]).isEmpty) {
+              if (pages.isEmpty || state.tilesOnPage(pages[state.currentTilePageIndex.clamp(0, pages.length - 1)]).isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('当前磁贴页还没有应用，先点击 ➕ 置顶')),
                 );
@@ -263,18 +264,19 @@ class _TileBoardState extends State<_TileBoard> {
   int _dragRow = 0;
   double _cellW = 60;
 
-  void _startDrag(String pkg) {
-    final m = widget.state.metaFor(pkg);
+  void _startDrag(String tileId) {
+    final t = widget.state.tileById(tileId);
+    if (t == null) return;
     setState(() {
-      _dragId = pkg;
-      _dragW = m.tileW;
-      _dragH = m.tileH;
-      _dragCol = m.tileCol < 0 ? 0 : m.tileCol;
-      _dragRow = m.tileRow < 0 ? 0 : m.tileRow;
+      _dragId = tileId;
+      _dragW = t.w;
+      _dragH = t.h;
+      _dragCol = t.col < 0 ? 0 : t.col;
+      _dragRow = t.row < 0 ? 0 : t.row;
     });
   }
 
-  void _updateDrag(String pkg, Offset globalPosition) {
+  void _updateDrag(String tileId, Offset globalPosition) {
     final box = _boardKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return;
     final local = box.globalToLocal(globalPosition);
@@ -292,8 +294,8 @@ class _TileBoardState extends State<_TileBoard> {
     }
   }
 
-  void _endDrag(String pkg) {
-    widget.state.moveTile(pkg, _dragCol, _dragRow);
+  void _endDrag(String tileId) {
+    widget.state.moveTile(tileId, _dragCol, _dragRow);
     setState(() => _dragId = null);
   }
 
@@ -307,8 +309,8 @@ class _TileBoardState extends State<_TileBoard> {
     final state = widget.state;
     final page = widget.page;
     final editable = state.tileEditMode;
-    final pins = state.pinsOnPage(page);
-    if (pins.isEmpty) {
+    final pageTiles = state.tilesOnPage(page);
+    if (pageTiles.isEmpty) {
       return _hint(
         context,
         icon: Icons.grid_view_rounded,
@@ -320,15 +322,14 @@ class _TileBoardState extends State<_TileBoard> {
       final cellW =
           (constraints.maxWidth - _pad * 2 - _gap * (kTileCols - 1)) / kTileCols;
       _cellW = cellW;
-      final specs = pins.map((a) {
-        final m = state.metaFor(a.packageName);
-        final resizing = a.packageName == _resizeId;
+      final specs = pageTiles.map((t) {
+        final resizing = t.id == _resizeId;
         return TileSpec(
-          id: a.packageName,
-          w: resizing ? _resizeW : m.tileW,
-          h: resizing ? _resizeH : m.tileH,
-          col: m.tileCol,
-          row: m.tileRow,
+          id: t.id,
+          w: resizing ? _resizeW : t.w,
+          h: resizing ? _resizeH : t.h,
+          col: t.col,
+          row: t.row,
         );
       }).toList();
       final layout = resolveTileLayout(specs);
@@ -367,32 +368,36 @@ class _TileBoardState extends State<_TileBoard> {
                     ),
                   ),
                 ),
-              for (final app in pins)
+              for (final t in pageTiles)
                 Builder(builder: (context) {
-                  final p = layout.placements[app.packageName]!;
+                  final app = state.appByPackage(t.packageName);
+                  if (app == null) return const SizedBox.shrink();
+                  final p = layout.placements[t.id]!;
                   return Positioned(
                     left: x(p.col),
                     top: y(p.row),
                     width: w(p.w),
                     height: h(p.h),
                     child: _Tile(
+                      key: ValueKey(t.id),
+                      tile: t,
                       app: app,
                       state: state,
                       page: page,
                       cellW: cellW,
                       gap: _gap,
                       editable: editable,
-                      onDragStart: () => _startDrag(app.packageName),
-                      onDragUpdate: (pos) => _updateDrag(app.packageName, pos),
-                      onDragEnd: () => _endDrag(app.packageName),
+                      onDragStart: () => _startDrag(t.id),
+                      onDragUpdate: (pos) => _updateDrag(t.id, pos),
+                      onDragEnd: () => _endDrag(t.id),
                       onDragCancel: _cancelDrag,
                     ),
                   );
                 }),
               if (editable)
-                for (final app in pins)
+                for (final t in pageTiles)
                   Builder(builder: (context) {
-                    final p = layout.placements[app.packageName]!;
+                    final p = layout.placements[t.id]!;
                     return Positioned(
                       left: x(p.col) + w(p.w) - _kHandleSize,
                       top: y(p.row) + h(p.h) - _kHandleSize,
@@ -400,16 +405,16 @@ class _TileBoardState extends State<_TileBoard> {
                       height: _kHandleSize,
                       child: _ResizeHandle(
                         state: state,
-                        packageName: app.packageName,
+                        tileId: t.id,
                         cellW: cellW,
                         gap: _gap,
                         onPreview: (pw, ph) => setState(() {
-                          _resizeId = app.packageName;
+                          _resizeId = t.id;
                           _resizeW = pw;
                           _resizeH = ph;
                         }),
                         onEnd: () {
-                          state.setTileSize(app.packageName, _resizeW, _resizeH);
+                          state.setTileSize(t.id, _resizeW, _resizeH);
                           setState(() => _resizeId = null);
                         },
                       ),
@@ -434,7 +439,7 @@ const double _kHandleSize = 40;
 class _ResizeHandle extends StatefulWidget {
   const _ResizeHandle({
     required this.state,
-    required this.packageName,
+    required this.tileId,
     required this.cellW,
     required this.gap,
     required this.onPreview,
@@ -442,7 +447,7 @@ class _ResizeHandle extends StatefulWidget {
   });
 
   final AppState state;
-  final String packageName;
+  final String tileId;
   final double cellW;
   final double gap;
   final void Function(int w, int h) onPreview;
@@ -462,11 +467,12 @@ class _ResizeHandleState extends State<_ResizeHandle> {
   bool _active = false;
 
   void _start(Offset _) {
-    final m = widget.state.metaFor(widget.packageName);
-    _startW = m.tileW.toDouble();
-    _startH = m.tileH.toDouble();
-    _w = m.tileW;
-    _h = m.tileH;
+    final t = widget.state.tileById(widget.tileId);
+    if (t == null) return;
+    _startW = t.w.toDouble();
+    _startH = t.h.toDouble();
+    _w = t.w;
+    _h = t.h;
     _accX = 0;
     _accY = 0;
     setState(() => _active = true);
@@ -792,6 +798,8 @@ void _pageMenu(
 
 class _Tile extends StatelessWidget {
   const _Tile({
+    super.key,
+    required this.tile,
     required this.app,
     required this.state,
     required this.page,
@@ -804,6 +812,7 @@ class _Tile extends StatelessWidget {
     required this.onDragCancel,
   });
 
+  final Tile tile;
   final AppInfo app;
   final AppState state;
   final TilePage page;
@@ -817,9 +826,8 @@ class _Tile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final meta = state.metaFor(app.packageName);
-    final width = meta.tileW * cellW + (meta.tileW - 1) * gap;
-    final height = meta.tileH * cellW + (meta.tileH - 1) * gap;
+    final width = tile.w * cellW + (tile.w - 1) * gap;
+    final height = tile.h * cellW + (tile.h - 1) * gap;
     final shortest = width < height ? width : height;
     final iconSize = (shortest * 0.42).clamp(24.0, 96.0);
     final fontScale = (shortest / 56).clamp(0.85, 1.9);
@@ -829,7 +837,7 @@ class _Tile extends StatelessWidget {
     if (!editable) return content;
 
     return LongPressDraggable<String>(
-      data: app.packageName,
+      data: tile.id,
       delay: const Duration(milliseconds: 180),
       dragAnchorStrategy: pointerDragAnchorStrategy,
       feedback: _feedback(width, height, content),
@@ -971,6 +979,14 @@ class _Tile extends StatelessWidget {
                   );
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.content_copy_outlined),
+                title: const Text('再添加一个到本页'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  state.addTile(app.packageName, pageId: page.id);
+                },
+              ),
               if (state.tilePages.length > 1)
                 ListTile(
                   leading: const Icon(Icons.drive_file_move_outline),
@@ -982,10 +998,10 @@ class _Tile extends StatelessWidget {
                 ),
               ListTile(
                 leading: const Icon(Icons.push_pin_outlined),
-                title: const Text('取消置顶'),
+                title: const Text('移除该磁贴'),
                 onTap: () {
-                  state.togglePinned(app.packageName);
                   Navigator.pop(ctx);
+                  state.removeTile(tile.id);
                 },
               ),
             ],
@@ -1021,7 +1037,7 @@ class _Tile extends StatelessWidget {
       ),
     );
     if (target != null) {
-      await state.assignPinToPage(app.packageName, target.id);
+      await state.assignTileToPage(tile.id, target.id);
     }
   }
 

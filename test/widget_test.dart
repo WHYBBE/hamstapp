@@ -5,6 +5,7 @@ import 'package:hamstapp/models/app_meta.dart';
 import 'package:hamstapp/models/category.dart';
 import 'package:hamstapp/models/snapshot.dart';
 import 'package:hamstapp/models/snapshot_diff.dart';
+import 'package:hamstapp/models/tile.dart';
 import 'package:hamstapp/models/tile_page.dart';
 import 'package:hamstapp/services/storage.dart';
 import 'package:hamstapp/state/app_state.dart';
@@ -220,60 +221,84 @@ void main() {
     expect(p.row, 0);
   });
 
-  test('pinning binds the app to the current page', () async {
+  test('addTile pins to the current page and allows duplicates', () async {
     final state = AppState(_MemStorage());
     state.tilePages = [
       TilePage(id: 'p1', name: 'P1', createdAt: 0),
       TilePage(id: 'p2', name: 'P2', createdAt: 0),
     ];
-    state.currentTilePageIndex = 1;
     state.apps = [_ai('com.x', 'X')];
+    state.currentTilePageIndex = 1;
 
-    await state.togglePinned('com.x');
+    final t1 = await state.addTile('com.x');
+    final t2 = await state.addTile('com.x');
 
-    expect(state.metaFor('com.x').tilePageId, 'p2');
+    expect(t1.pageId, 'p2');
+    expect(t2.pageId, 'p2');
+    expect(t1.id, isNot(t2.id));
+    expect(state.metaFor('com.x').pinned, isTrue);
     expect(state.pinCountOnPage(state.tilePages[0]), 0);
-    expect(state.pinCountOnPage(state.tilePages[1]), 1);
+    expect(state.pinCountOnPage(state.tilePages[1]), 2);
   });
 
-  test('reordering a page keeps its pinned apps with it', () async {
+  test('removing one duplicate keeps the others', () async {
+    final state = AppState(_MemStorage());
+    state.tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)];
+    state.apps = [_ai('com.x', 'X')];
+
+    final t1 = await state.addTile('com.x');
+    await state.addTile('com.x');
+    await state.removeTile(t1.id);
+
+    expect(state.tiles.length, 1);
+    expect(state.metaFor('com.x').pinned, isTrue);
+  });
+
+  test('reordering a page keeps its tiles with it', () async {
     final state = AppState(_MemStorage());
     state.tilePages = [
       TilePage(id: 'p1', name: 'P1', createdAt: 0),
       TilePage(id: 'p2', name: 'P2', createdAt: 0),
     ];
     state.apps = [_ai('com.a', 'A'), _ai('com.b', 'B')];
-    state.metaFor('com.a')
-      ..pinned = true
-      ..tilePageId = 'p1';
-    state.metaFor('com.b')
-      ..pinned = true
-      ..tilePageId = 'p2';
+    state.tiles = [
+      Tile(id: 't1', packageName: 'com.a', pageId: 'p1'),
+      Tile(id: 't2', packageName: 'com.b', pageId: 'p2'),
+    ];
 
-    // Move P2 to the front; its pin must follow to index 0.
+    // Move P2 to the front; its tile must follow to index 0.
     await state.moveTilePage(1, -1);
 
     expect(state.tilePages.first.id, 'p2');
     expect(state.currentTilePageIndex, 0);
     final onFirst =
-        state.pinsOnPage(state.tilePages[0]).map((a) => a.packageName);
+        state.tilesOnPage(state.tilePages[0]).map((t) => t.packageName);
     expect(onFirst, contains('com.b'));
     expect(onFirst, isNot(contains('com.a')));
   });
 
-  test('legacy pins without a page id bind to the first page on load', () async {
+  test('legacy pinned meta migrates into a tile on load', () async {
     final storage = _MemStorage();
     storage._data['tile_pages'] = [
       TilePage(id: 'p1', name: 'P1', createdAt: 0).toMap(),
       TilePage(id: 'p2', name: 'P2', createdAt: 0).toMap(),
     ];
     storage._data['meta'] = {
-      'com.legacy': AppMeta(packageName: 'com.legacy', pinned: true).toMap(),
+      'com.legacy': AppMeta(
+        packageName: 'com.legacy',
+        pinned: true,
+        tilePageId: 'p2',
+      ).toMap(),
     };
 
     final state = AppState(storage);
     await state.init();
 
-    expect(state.metaFor('com.legacy').tilePageId, 'p1');
+    expect(state.tiles.length, 1);
+    expect(state.tiles.single.packageName, 'com.legacy');
+    expect(state.tiles.single.pageId, 'p2');
+
+    state.apps = [_ai('com.legacy', 'L')];
+    expect(state.pinCountOnPage(state.tilePages[1]), 1);
   });
 }

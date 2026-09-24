@@ -107,10 +107,9 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: meta.pinned,
-            onChanged: (v) =>
-                state.updateMeta(widget.packageName, pinned: v),
+            onChanged: (v) => state.setPinned(widget.packageName, v),
             title: const Text('置顶到磁贴'),
-            subtitle: const Text('在「快速启动 → 磁贴」中显示'),
+            subtitle: const Text('在「快速启动 → 磁贴」中显示（可多份）'),
           ),
           const SizedBox(height: 12),
           _SectionTitle('安装原因'),

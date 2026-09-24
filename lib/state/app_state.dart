@@ -7,6 +7,7 @@ import '../models/app_meta.dart';
 import '../models/backup_list.dart';
 import '../models/category.dart';
 import '../models/snapshot.dart';
+import '../models/tile.dart';
 import '../models/tile_page.dart';
 import '../services/native_apps.dart';
 import '../services/storage.dart';
@@ -41,6 +42,7 @@ class AppState extends ChangeNotifier {
   List<Snapshot> snapshots = <Snapshot>[];
   List<BackupList> backupLists = <BackupList>[];
   List<TilePage> tilePages = <TilePage>[];
+  List<Tile> tiles = <Tile>[];
   Map<String, dynamic> settings = <String, dynamic>{};
 
   /// Apps detected as uninstalled during the most recent scan and that the
@@ -86,15 +88,39 @@ class AppState extends ChangeNotifier {
       ));
       await _persistTilePages();
     }
-    // Bind legacy pins (no/unknown page) to the first page so they follow that
-    // page when it is reordered instead of always showing on the first slot.
+    // Tiles are independent of apps; load them and migrate legacy pins
+    // (stored on AppMeta as a single `pinned` flag) into concrete tile entries.
     final firstPageId = tilePages.first.id;
     final validPageIds = tilePages.map((p) => p.id).toSet();
+    tiles = await _loadTiles();
+    if (tiles.isEmpty) {
+      for (final m in meta.values) {
+        if (!m.pinned) continue;
+        tiles.add(Tile(
+          id: _newId(),
+          packageName: m.packageName,
+          pageId: validPageIds.contains(m.tilePageId)
+              ? m.tilePageId
+              : firstPageId,
+          col: m.tileCol,
+          row: m.tileRow,
+          w: m.tileW,
+          h: m.tileH,
+        ));
+      }
+      if (tiles.isNotEmpty) await _persistTiles();
+    }
+    for (final t in tiles) {
+      if (!validPageIds.contains(t.pageId)) t.pageId = firstPageId;
+    }
+    // Keep the derived `pinned` flag on each AppMeta in sync with the tiles so
+    // snapshots and the app detail switch keep working.
+    final tiledPackages = tiles.map((t) => t.packageName).toSet();
     var metaChanged = false;
     for (final m in meta.values) {
-      if (m.pinned &&
-          (m.tilePageId.isEmpty || !validPageIds.contains(m.tilePageId))) {
-        m.tilePageId = firstPageId;
+      final shouldPin = tiledPackages.contains(m.packageName);
+      if (m.pinned != shouldPin) {
+        m.pinned = shouldPin;
         metaChanged = true;
       }
     }
@@ -269,7 +295,6 @@ class AppState extends ChangeNotifier {
     String? reason,
     String? note,
     bool? favorite,
-    bool? pinned,
     List<String>? categoryIds,
     String? uninstallReason,
   }) async {
@@ -277,7 +302,6 @@ class AppState extends ChangeNotifier {
     if (reason != null) m.reason = reason;
     if (note != null) m.note = note;
     if (favorite != null) m.favorite = favorite;
-    if (pinned != null) m.pinned = pinned;
     if (categoryIds != null) m.categoryIds = categoryIds;
     if (uninstallReason != null) m.uninstallReason = uninstallReason;
     await _persistMeta();
@@ -427,12 +451,14 @@ class AppState extends ChangeNotifier {
 
     final installed = {for (final a in apps) a.packageName};
 
+    final firstPageId = tilePages.isEmpty ? '' : tilePages.first.id;
+    var tilesChanged = false;
+
     for (final e in snapshot.entries) {
       final m = metaFor(e.packageName);
       m.reason = e.reason;
       m.note = e.note;
       m.favorite = e.favorite;
-      m.pinned = e.pinned;
       m.categoryIds =
           e.categoryIds.where(existingCatIds.contains).toList(growable: true);
       if (e.appName.isNotEmpty) m.lastKnownName = e.appName;
@@ -446,8 +472,25 @@ class AppState extends ChangeNotifier {
         m.uninstallReason = '';
         m.uninstalledAt = 0;
       }
+
+      // Reconcile the tile board with the snapshot's pinned flag: add one tile
+      // when pinned and none exist, drop all tiles when no longer pinned.
+      final hasTiles = tiles.any((t) => t.packageName == e.packageName);
+      if (e.pinned && !hasTiles && firstPageId.isNotEmpty) {
+        tiles.add(Tile(
+          id: _newId(),
+          packageName: e.packageName,
+          pageId: firstPageId,
+        ));
+        tilesChanged = true;
+      } else if (!e.pinned && hasTiles) {
+        tiles.removeWhere((t) => t.packageName == e.packageName);
+        tilesChanged = true;
+      }
+      m.pinned = e.pinned;
     }
 
+    if (tilesChanged) await _persistTiles();
     await _persistCategories();
     await _persistMeta();
     notifyListeners();
@@ -546,25 +589,119 @@ class AppState extends ChangeNotifier {
         .writeJson(_kTilePages, tilePages.map((p) => p.toMap()).toList());
   }
 
-  /// Pinned apps shown on [page]. Pins with an unknown/empty page id fall back
-  /// to the first page so they are never lost.
-  List<AppInfo> pinsOnPage(TilePage page) {
-    if (tilePages.isEmpty) return pinnedApps;
-    final first = tilePages.first;
-    final validIds = tilePages.map((p) => p.id).toSet();
-    return apps.where((a) {
-      if (!metaFor(a.packageName).pinned) return false;
-      final pid = metaFor(a.packageName).tilePageId;
-      if (page.id == first.id) {
-        return pid.isEmpty || !validIds.contains(pid) || pid == page.id;
-      }
-      return pid == page.id;
-    }).toList()
-      ..sort((a, b) =>
-          a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
+  Future<List<Tile>> _loadTiles() async {
+    final raw = await storage.readJson(_kTiles);
+    if (raw is List) {
+      return raw
+          .map((e) => Tile.fromMap((e as Map).cast<String, dynamic>()))
+          .toList();
+    }
+    return <Tile>[];
   }
 
-  int pinCountOnPage(TilePage page) => pinsOnPage(page).length;
+  Future<void> _persistTiles() async {
+    await storage.writeJson(_kTiles, tiles.map((t) => t.toMap()).toList());
+  }
+
+  Tile? tileById(String id) {
+    for (final t in tiles) {
+      if (t.id == id) return t;
+    }
+    return null;
+  }
+
+  /// Tiles shown on [page], in stable display order. Tiles whose page no longer
+  /// exists fall back to the first page; tiles whose app is gone are skipped.
+  List<Tile> tilesOnPage(TilePage page) {
+    if (tilePages.isEmpty) return const <Tile>[];
+    final firstId = tilePages.first.id;
+    final validIds = tilePages.map((p) => p.id).toSet();
+    final result = tiles.where((t) {
+      if (appByPackage(t.packageName) == null) return false;
+      final pid = validIds.contains(t.pageId) ? t.pageId : firstId;
+      return pid == page.id;
+    }).toList();
+    result.sort((a, b) {
+      final ar = a.row < 0 ? 1 << 20 : a.row;
+      final br = b.row < 0 ? 1 << 20 : b.row;
+      if (ar != br) return ar.compareTo(br);
+      final ac = a.col < 0 ? 1 << 20 : a.col;
+      final bc = b.col < 0 ? 1 << 20 : b.col;
+      if (ac != bc) return ac.compareTo(bc);
+      return a.id.compareTo(b.id);
+    });
+    return result;
+  }
+
+  int pinCountOnPage(TilePage page) => tilesOnPage(page).length;
+
+  /// Add a tile for [packageName] on [pageId] (defaults to the current page).
+  /// Duplicates are allowed: the same app can be added any number of times.
+  Future<Tile> addTile(String packageName, {String? pageId}) async {
+    final target = pageId ??
+        currentTilePageId ??
+        (tilePages.isEmpty ? '' : tilePages.first.id);
+    final tile = Tile(
+      id: _newId(),
+      packageName: packageName,
+      pageId: target,
+    );
+    tiles.add(tile);
+    metaFor(packageName).pinned = true;
+    await _persistTiles();
+    await _persistMeta();
+    notifyListeners();
+    return tile;
+  }
+
+  Future<void> removeTile(String tileId) async {
+    final tile = tileById(tileId);
+    if (tile == null) return;
+    tiles.removeWhere((t) => t.id == tileId);
+    _syncPinned(tile.packageName);
+    await _persistTiles();
+    await _persistMeta();
+    notifyListeners();
+  }
+
+  /// Remove every tile for [packageName].
+  Future<void> removeTilesFor(String packageName) async {
+    final before = tiles.length;
+    tiles.removeWhere((t) => t.packageName == packageName);
+    if (tiles.length == before) return;
+    _syncPinned(packageName);
+    await _persistTiles();
+    await _persistMeta();
+    notifyListeners();
+  }
+
+  void _syncPinned(String packageName) {
+    metaFor(packageName).pinned =
+        tiles.any((t) => t.packageName == packageName);
+  }
+
+  /// Add a tile for [packageName] when [value] is true (on [pageId], defaulting
+  /// to the current page), otherwise remove all of its tiles.
+  Future<void> setPinned(String packageName, bool value, {String? pageId}) async {
+    final has = tiles.any((t) => t.packageName == packageName);
+    if (value) {
+      if (has) return;
+      await addTile(packageName, pageId: pageId);
+    } else {
+      await removeTilesFor(packageName);
+    }
+  }
+
+  /// Flip pinning for [packageName]: drop all tiles if any exist, otherwise add
+  /// one (to [pageId] or the current page).
+  Future<void> togglePinned(String packageName, {String? pageId}) async {
+    final has = tiles.any((t) => t.packageName == packageName);
+    if (has) {
+      await removeTilesFor(packageName);
+    } else {
+      await addTile(packageName, pageId: pageId);
+    }
+  }
 
   Future<TilePage> addTilePage(String name) async {
     final page = TilePage(
@@ -589,21 +726,22 @@ class AppState extends ChangeNotifier {
     if (tilePages.length <= 1) return;
     tilePages.removeWhere((p) => p.id == id);
     final firstId = tilePages.first.id;
-    for (final m in meta.values) {
-      if (m.pinned && m.tilePageId == id) m.tilePageId = firstId;
+    for (final t in tiles) {
+      if (t.pageId == id) t.pageId = firstId;
     }
     if (currentTilePageIndex >= tilePages.length) {
       currentTilePageIndex = tilePages.length - 1;
     }
     await _persistTilePages();
-    await _persistMeta();
+    await _persistTiles();
     notifyListeners();
   }
 
-  Future<void> assignPinToPage(String packageName, String pageId) async {
-    final m = metaFor(packageName);
-    m.tilePageId = pageId;
-    await _persistMeta();
+  Future<void> assignTileToPage(String tileId, String pageId) async {
+    final tile = tileById(tileId);
+    if (tile == null) return;
+    tile.pageId = pageId;
+    await _persistTiles();
     notifyListeners();
   }
 
@@ -616,67 +754,60 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  TilePage _pageForPin(String packageName) {
+  TilePage _pageForTile(Tile tile) {
     if (tilePages.isEmpty) {
       return TilePage(id: '', name: '页面 1', createdAt: 0);
     }
-    final pid = metaFor(packageName).tilePageId;
     return tilePages.firstWhere(
-      (p) => p.id == pid,
+      (p) => p.id == tile.pageId,
       orElse: () => tilePages.first,
     );
   }
 
-  List<TileSpec> _specsForPage(TilePage page, {String? exclude}) {
+  List<TileSpec> _specsForPage(TilePage page, {required String exclude}) {
     final specs = <TileSpec>[];
-    for (final a in pinsOnPage(page)) {
-      if (a.packageName == exclude) continue;
-      final m = metaFor(a.packageName);
-      specs.add(TileSpec(
-        id: a.packageName,
-        w: m.tileW,
-        h: m.tileH,
-        col: m.tileCol,
-        row: m.tileRow,
-      ));
+    for (final t in tilesOnPage(page)) {
+      if (t.id == exclude) continue;
+      specs.add(TileSpec(id: t.id, w: t.w, h: t.h, col: t.col, row: t.row));
     }
     return specs;
   }
 
   /// Move a tile to the given grid cell (finds the nearest free spot on
   /// collision).
-  Future<void> moveTile(String packageName, int col, int row) async {
-    final m = metaFor(packageName);
-    final page = _pageForPin(packageName);
-    final others = _specsForPage(page, exclude: packageName);
-    final p = resolveMove(
-        others, packageName, col, row, m.tileW, m.tileH);
-    m.tileCol = p.col;
-    m.tileRow = p.row;
-    await _persistMeta();
+  Future<void> moveTile(String tileId, int col, int row) async {
+    final tile = tileById(tileId);
+    if (tile == null) return;
+    final page = _pageForTile(tile);
+    final others = _specsForPage(page, exclude: tileId);
+    final p = resolveMove(others, tileId, col, row, tile.w, tile.h);
+    tile.col = p.col;
+    tile.row = p.row;
+    await _persistTiles();
     notifyListeners();
   }
 
   /// Change a tile's size (width 1..6, height 1..6), relocating if needed.
-  Future<void> setTileSize(String packageName, int w, int h) async {
+  Future<void> setTileSize(String tileId, int w, int h) async {
+    final tile = tileById(tileId);
+    if (tile == null) return;
     final cw = w.clamp(1, kTileCols);
     final ch = h.clamp(1, kTileMaxH);
-    final m = metaFor(packageName);
-    final page = _pageForPin(packageName);
-    final others = _specsForPage(page, exclude: packageName);
+    final page = _pageForTile(tile);
+    final others = _specsForPage(page, exclude: tileId);
     final p = resolveMove(
       others,
-      packageName,
-      m.tileCol < 0 ? 0 : m.tileCol,
-      m.tileRow < 0 ? 0 : m.tileRow,
+      tileId,
+      tile.col < 0 ? 0 : tile.col,
+      tile.row < 0 ? 0 : tile.row,
       cw,
       ch,
     );
-    m.tileW = cw;
-    m.tileH = ch;
-    m.tileCol = p.col;
-    m.tileRow = p.row;
-    await _persistMeta();
+    tile.w = cw;
+    tile.h = ch;
+    tile.col = p.col;
+    tile.row = p.row;
+    await _persistTiles();
     notifyListeners();
   }
 
@@ -804,13 +935,6 @@ class AppState extends ChangeNotifier {
     ..sort((a, b) =>
         a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
 
-  /// Apps manually pinned to the tile board, ordered by name.
-  List<AppInfo> get pinnedApps => apps
-      .where((a) => metaFor(a.packageName).pinned)
-      .toList()
-    ..sort((a, b) =>
-        a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
-
   /// Apps launched from this app, most recent first.
   List<AppInfo> get recentApps {
     final list = apps
@@ -825,21 +949,6 @@ class AppState extends ChangeNotifier {
   Future<void> markLaunched(String packageName) async {
     final m = metaFor(packageName);
     m.lastLaunchedAt = DateTime.now().millisecondsSinceEpoch;
-    await _persistMeta();
-    notifyListeners();
-  }
-
-  Future<void> togglePinned(String packageName, {String? pageId}) async {
-    final m = metaFor(packageName);
-    m.pinned = !m.pinned;
-    if (m.pinned) {
-      // Bind freshly pinned apps to a concrete page so they move together with
-      // that page when its position changes (otherwise they would always fall
-      // back to whichever page happens to be first).
-      m.tilePageId = pageId ?? currentTilePageId ?? tilePages.first.id;
-    } else {
-      m.tilePageId = '';
-    }
     await _persistMeta();
     notifyListeners();
   }
@@ -880,5 +989,6 @@ class AppState extends ChangeNotifier {
   static const _kBackupLists = 'backup_lists';
   static const _kAppsCache = 'apps_cache';
   static const _kTilePages = 'tile_pages';
+  static const _kTiles = 'tiles';
   static const _kSettings = 'settings';
 }

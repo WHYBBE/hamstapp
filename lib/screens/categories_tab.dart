@@ -143,23 +143,37 @@ void showPinSheet(BuildContext context, AppState state) {
                     itemCount: apps.length,
                     itemBuilder: (context, i) {
                       final app = apps[i];
-                      final pinned = state.metaFor(app.packageName).pinned;
+                      final count = state.tiles
+                          .where((t) => t.packageName == app.packageName)
+                          .length;
                       return ListTile(
                         leading: AppIcon(
                             packageName: app.packageName, label: app.appName),
                         title: Text(app.appName),
                         subtitle: Text(app.packageName,
                             maxLines: 1, overflow: TextOverflow.ellipsis),
-                        trailing: Icon(
-                          pinned
-                              ? Icons.push_pin
-                              : Icons.push_pin_outlined,
-                          color: pinned ? Colors.orange : Colors.grey,
-                        ),
+                        trailing: count == 0
+                            ? const Icon(Icons.add_circle_outline,
+                                color: Colors.grey)
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.push_pin,
+                                      color: Colors.orange, size: 18),
+                                  const SizedBox(width: 4),
+                                  Text('$count'),
+                                ],
+                              ),
                         onTap: () {
-                          state.togglePinned(app.packageName,
+                          state.addTile(app.packageName,
                               pageId: state.currentTilePageId);
                           setLocal(() {});
+                          final messenger = ScaffoldMessenger.of(context);
+                          messenger.hideCurrentSnackBar();
+                          messenger.showSnackBar(const SnackBar(
+                            content: Text('已添加到当前磁贴页（可重复添加）'),
+                            duration: Duration(milliseconds: 900),
+                          ));
                         },
                       );
                     },
