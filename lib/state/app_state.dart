@@ -6,6 +6,7 @@ import '../models/app_info.dart';
 import '../models/app_meta.dart';
 import '../models/backup_list.dart';
 import '../models/category.dart';
+import '../models/remote_source.dart';
 import '../models/snapshot.dart';
 import '../models/tile.dart';
 import '../models/tile_page.dart';
@@ -862,6 +863,19 @@ class AppState extends ChangeNotifier {
 
   Future<void> setTileDefaultSize(int value) async {
     settings['tile_default_size'] = value.clamp(1, kTileMaxH);
+    await _persistSettings();
+    notifyListeners();
+  }
+
+  /// Remembered remote APK source (FTP / SMB) used to sync the APK list.
+  RemoteSource get remoteSource {
+    final raw = settings['remote_source'];
+    if (raw is Map) return RemoteSource.fromMap(raw.cast<String, dynamic>());
+    return RemoteSource();
+  }
+
+  Future<void> setRemoteSource(RemoteSource source) async {
+    settings['remote_source'] = source.toMap();
     await _persistSettings();
     notifyListeners();
   }

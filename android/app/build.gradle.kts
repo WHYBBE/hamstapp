@@ -40,6 +40,7 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            proguardFile("proguard-rules.pro")
         }
     }
 }
@@ -52,4 +53,10 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Remote APK sources: FTP + SMB (Samba) clients.
+    implementation("commons-net:commons-net:3.11.1")
+    implementation("eu.agno3.jcifs:jcifs-ng:2.1.10")
 }

@@ -55,4 +55,22 @@ class NativeApps {
     final info = await _channel.invokeMethod<Map<dynamic, dynamic>>('getDeviceInfo');
     return (info ?? {}).cast<String, dynamic>();
   }
+
+  /// Tests a remote APK source. Returns `{ok: bool, count: int, error: String?}`.
+  static Future<Map<String, dynamic>> remoteTest(
+      Map<String, dynamic> config) async {
+    final r = await _channel
+        .invokeMethod<Map<dynamic, dynamic>>('remoteTest', config);
+    return (r ?? {}).cast<String, dynamic>();
+  }
+
+  /// Lists `.apk` files on a remote source. Each item has name/size/path.
+  static Future<List<Map<String, dynamic>>> remoteList(
+      Map<String, dynamic> config) async {
+    final raw = await _channel.invokeMethod<List<dynamic>>('remoteList', config);
+    if (raw == null) return <Map<String, dynamic>>[];
+    return raw
+        .map((e) => (e as Map).cast<String, dynamic>())
+        .toList(growable: false);
+  }
 }

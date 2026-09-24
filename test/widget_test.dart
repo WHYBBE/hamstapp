@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:hamstapp/models/app_info.dart';
 import 'package:hamstapp/models/app_meta.dart';
+import 'package:hamstapp/models/remote_source.dart';
 import 'package:hamstapp/models/category.dart';
 import 'package:hamstapp/models/snapshot.dart';
 import 'package:hamstapp/models/snapshot_diff.dart';
@@ -357,6 +358,45 @@ void main() {
     expect(state.metaFor('com.x').reason, 'because');
     expect(state.metaFor('com.x').pinned, isTrue);
     expect(state.tileDefaultSize, 3);
+  });
+
+  test('remote source config round-trips through settings', () async {
+    final state = AppState(_MemStorage());
+    expect(state.remoteSource.configured, isFalse);
+    expect(state.remoteSource.anonymous, isTrue);
+
+    await state.setRemoteSource(RemoteSource(
+      protocol: 'smb',
+      host: 'nas.local',
+      port: 445,
+      path: 'share/apks',
+      username: 'u',
+      password: 'p',
+      anonymous: false,
+    ));
+
+    final s = state.remoteSource;
+    expect(s.isSmb, isTrue);
+    expect(s.host, 'nas.local');
+    expect(s.path, 'share/apks');
+    expect(s.username, 'u');
+    expect(s.configured, isTrue);
+
+    // Survives an export/import cycle too.
+    final pkg = state.exportPackage();
+    final fresh = AppState(_MemStorage());
+    await fresh.importPackage(pkg);
+    expect(fresh.remoteSource.path, 'share/apks');
+    expect(fresh.remoteSource.anonymous, isFalse);
+  });
+
+  test('RemoteSource.fromMap defaults are sane', () {
+    final s = RemoteSource.fromMap(<String, dynamic>{});
+    expect(s.protocol, 'ftp');
+    expect(s.port, 21);
+    expect(s.anonymous, isTrue);
+    expect(RemoteSource.defaultPort('smb'), 445);
+    expect(RemoteSource.defaultPort('ftp'), 21);
   });
 
   test('import rejects a malformed package without touching data', () async {
