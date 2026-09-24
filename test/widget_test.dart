@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:hamstapp/models/app_info.dart';
@@ -324,6 +326,49 @@ void main() {
     ];
     final ranked = AppSearch.rank(apps, 'wx');
     expect(ranked.first.packageName, 'com.y');
+  });
+
+  test('export/import round-trips all data', () async {
+    final state = AppState(_MemStorage());
+    state.tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)];
+    state.apps = [_ai('com.x', 'X')];
+    state.metaFor('com.x')
+      ..reason = 'because'
+      ..favorite = true;
+    state.categories = [AppCategory(id: 'c1', name: '工具', emoji: '🛠️')];
+    state.tiles = [
+      Tile(id: 't1', packageName: 'com.x', pageId: 'p1', w: 2, h: 2),
+    ];
+    state.settings['tile_default_size'] = 3;
+
+    // Must be JSON-serialisable and re-parse cleanly.
+    final pkg = jsonDecode(jsonEncode(state.exportPackage()))
+        as Map<String, dynamic>;
+
+    await state.clearAllData();
+    expect(state.tiles, isEmpty);
+    expect(state.categories, isEmpty);
+    expect(state.meta, isEmpty);
+
+    await state.importPackage(pkg);
+    expect(state.categories.single.name, '工具');
+    expect(state.tiles.single.packageName, 'com.x');
+    expect(state.tiles.single.w, 2);
+    expect(state.metaFor('com.x').reason, 'because');
+    expect(state.metaFor('com.x').pinned, isTrue);
+    expect(state.tileDefaultSize, 3);
+  });
+
+  test('import rejects a malformed package without touching data', () async {
+    final state = AppState(_MemStorage());
+    state.tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)];
+    state.categories = [AppCategory(id: 'c1', name: 'keep', emoji: 'x')];
+
+    await expectLater(
+      state.importPackage(<String, dynamic>{'app': 'other'}),
+      throwsA(isA<FormatException>()),
+    );
+    expect(state.categories.single.name, 'keep');
   });
 
   test('legacy pinned meta migrates into a tile on load', () async {

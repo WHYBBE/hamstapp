@@ -126,27 +126,20 @@ class AppState extends ChangeNotifier {
       }
     }
     if (metaChanged) await _persistMeta();
-    final cached = await storage.readJson(_kAppsCache);
-    if (cached is List) {
-      apps = cached
-          .map((e) => AppInfo.fromMap((e as Map).cast<dynamic, dynamic>()))
-          .toList();
-    }
+    apps = _parseApps(await storage.readJson(_kAppsCache));
     initialized = true;
     notifyListeners();
   }
 
-  Future<Map<String, AppMeta>> _loadMeta() async {
-    final raw = await storage.readJson(_kMeta);
+  Map<String, AppMeta> _parseMeta(dynamic raw) {
     if (raw is Map) {
-      return raw.map((k, v) =>
-          MapEntry(k as String, AppMeta.fromMap((v as Map).cast<String, dynamic>())));
+      return raw.map((k, v) => MapEntry(
+          k as String, AppMeta.fromMap((v as Map).cast<String, dynamic>())));
     }
     return <String, AppMeta>{};
   }
 
-  Future<List<AppCategory>> _loadCategories() async {
-    final raw = await storage.readJson(_kCategories);
+  List<AppCategory> _parseCategories(dynamic raw) {
     if (raw is List) {
       return raw
           .map((e) => AppCategory.fromMap((e as Map).cast<String, dynamic>()))
@@ -155,8 +148,7 @@ class AppState extends ChangeNotifier {
     return <AppCategory>[];
   }
 
-  Future<List<Snapshot>> _loadSnapshots() async {
-    final raw = await storage.readJson(_kSnapshots);
+  List<Snapshot> _parseSnapshots(dynamic raw) {
     if (raw is List) {
       return raw
           .map((e) => Snapshot.fromMap((e as Map).cast<String, dynamic>()))
@@ -165,8 +157,7 @@ class AppState extends ChangeNotifier {
     return <Snapshot>[];
   }
 
-  Future<List<BackupList>> _loadBackupLists() async {
-    final raw = await storage.readJson(_kBackupLists);
+  List<BackupList> _parseBackupLists(dynamic raw) {
     if (raw is List) {
       return raw
           .map((e) => BackupList.fromMap((e as Map).cast<String, dynamic>()))
@@ -174,6 +165,50 @@ class AppState extends ChangeNotifier {
     }
     return <BackupList>[];
   }
+
+  List<Tile> _parseTiles(dynamic raw) {
+    if (raw is List) {
+      return raw
+          .map((e) => Tile.fromMap((e as Map).cast<String, dynamic>()))
+          .toList();
+    }
+    return <Tile>[];
+  }
+
+  List<TilePage> _parseTilePages(dynamic raw) {
+    if (raw is List) {
+      return raw
+          .map((e) => TilePage.fromMap((e as Map).cast<String, dynamic>()))
+          .toList();
+    }
+    return <TilePage>[];
+  }
+
+  List<AppInfo> _parseApps(dynamic raw) {
+    if (raw is List) {
+      return raw
+          .map((e) => AppInfo.fromMap((e as Map).cast<dynamic, dynamic>()))
+          .toList();
+    }
+    return <AppInfo>[];
+  }
+
+  Map<String, dynamic> _parseSettings(dynamic raw) {
+    if (raw is Map) return raw.cast<String, dynamic>();
+    return <String, dynamic>{};
+  }
+
+  Future<Map<String, AppMeta>> _loadMeta() async =>
+      _parseMeta(await storage.readJson(_kMeta));
+
+  Future<List<AppCategory>> _loadCategories() async =>
+      _parseCategories(await storage.readJson(_kCategories));
+
+  Future<List<Snapshot>> _loadSnapshots() async =>
+      _parseSnapshots(await storage.readJson(_kSnapshots));
+
+  Future<List<BackupList>> _loadBackupLists() async =>
+      _parseBackupLists(await storage.readJson(_kBackupLists));
 
   // ---------------------------------------------------------------- scanning
 
@@ -575,30 +610,16 @@ class AppState extends ChangeNotifier {
 
   // ---------------------------------------------------------------- tile pages
 
-  Future<List<TilePage>> _loadTilePages() async {
-    final raw = await storage.readJson(_kTilePages);
-    if (raw is List) {
-      return raw
-          .map((e) => TilePage.fromMap((e as Map).cast<String, dynamic>()))
-          .toList();
-    }
-    return <TilePage>[];
-  }
+  Future<List<TilePage>> _loadTilePages() async =>
+      _parseTilePages(await storage.readJson(_kTilePages));
 
   Future<void> _persistTilePages() async {
     await storage
         .writeJson(_kTilePages, tilePages.map((p) => p.toMap()).toList());
   }
 
-  Future<List<Tile>> _loadTiles() async {
-    final raw = await storage.readJson(_kTiles);
-    if (raw is List) {
-      return raw
-          .map((e) => Tile.fromMap((e as Map).cast<String, dynamic>()))
-          .toList();
-    }
-    return <Tile>[];
-  }
+  Future<List<Tile>> _loadTiles() async =>
+      _parseTiles(await storage.readJson(_kTiles));
 
   Future<void> _persistTiles() async {
     await storage.writeJson(_kTiles, tiles.map((t) => t.toMap()).toList());
@@ -817,11 +838,8 @@ class AppState extends ChangeNotifier {
 
   // ---------------------------------------------------------------- settings
 
-  Future<Map<String, dynamic>> _loadSettings() async {
-    final raw = await storage.readJson(_kSettings);
-    if (raw is Map) return raw.cast<String, dynamic>();
-    return <String, dynamic>{};
-  }
+  Future<Map<String, dynamic>> _loadSettings() async =>
+      _parseSettings(await storage.readJson(_kSettings));
 
   Future<void> _persistSettings() async {
     await storage.writeJson(_kSettings, settings);
@@ -846,6 +864,143 @@ class AppState extends ChangeNotifier {
     settings['tile_default_size'] = value.clamp(1, kTileMaxH);
     await _persistSettings();
     notifyListeners();
+  }
+
+  // ---------------------------------------------------------------- backup
+
+  static const int backupVersion = 1;
+
+  /// Full data package: meta, categories, snapshots, backup lists, tiles,
+  /// tile pages, app cache and settings.
+  Map<String, dynamic> exportPackage() {
+    return <String, dynamic>{
+      'app': 'hamstapp',
+      'version': backupVersion,
+      'exportedAt': DateTime.now().millisecondsSinceEpoch,
+      'data': <String, dynamic>{
+        'meta': meta.map((k, v) => MapEntry(k, v.toMap())),
+        'categories': categories.map((c) => c.toMap()).toList(),
+        'snapshots': snapshots.map((s) => s.toMap()).toList(),
+        'backup_lists': backupLists.map((b) => b.toMap()).toList(),
+        'tiles': tiles.map((t) => t.toMap()).toList(),
+        'tile_pages': tilePages.map((p) => p.toMap()).toList(),
+        'apps': apps.map((a) => a.toMap()).toList(),
+        'settings': settings,
+      },
+    };
+  }
+
+  /// Counts of the main sections inside an [exportPackage], for a summary.
+  Map<String, int> packageCounts(Map<String, dynamic> pkg) {
+    final data = pkg['data'];
+    if (data is! Map) return const <String, int>{};
+    int len(Object? v) =>
+        v is List ? v.length : (v is Map ? v.length : 0);
+    return <String, int>{
+      '应用': len(data['apps']),
+      '分组': len(data['categories']),
+      '快照': len(data['snapshots']),
+      '备份列表': len(data['backup_lists']),
+      '磁贴': len(data['tiles']),
+    };
+  }
+
+  /// Replace ALL local data with the contents of [pkg].
+  ///
+  /// All-or-nothing: the whole package is parsed and validated before any
+  /// existing data is touched, so a malformed package cannot partially apply.
+  Future<void> importPackage(Map<String, dynamic> pkg) async {
+    if (pkg['app'] != 'hamstapp') {
+      throw const FormatException('不是囤囤的数据包');
+    }
+    final data = pkg['data'];
+    if (data is! Map) {
+      throw const FormatException('数据包缺少 data 内容');
+    }
+    final d = data.cast<String, dynamic>();
+
+    // Parse everything up front.
+    final newMeta = _parseMeta(d['meta']);
+    final newCategories = _parseCategories(d['categories']);
+    final newSnapshots = _parseSnapshots(d['snapshots']);
+    final newBackupLists = _parseBackupLists(d['backup_lists']);
+    final newTiles = _parseTiles(d['tiles']);
+    var newPages = _parseTilePages(d['tile_pages']);
+    final newApps = _parseApps(d['apps']);
+    final newSettings = _parseSettings(d['settings']);
+
+    if (newPages.isEmpty) {
+      newPages = [
+        TilePage(
+          id: _newId(),
+          name: '页面 1',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+        )
+      ];
+    }
+    final validPageIds = newPages.map((p) => p.id).toSet();
+    for (final t in newTiles) {
+      if (!validPageIds.contains(t.pageId)) t.pageId = newPages.first.id;
+    }
+    final tiledPackages = newTiles.map((t) => t.packageName).toSet();
+    for (final m in newMeta.values) {
+      m.pinned = tiledPackages.contains(m.packageName);
+    }
+
+    // Commit (all parsed successfully).
+    meta = newMeta;
+    categories = newCategories;
+    snapshots = newSnapshots;
+    backupLists = newBackupLists;
+    tiles = newTiles;
+    tilePages = newPages;
+    apps = newApps;
+    settings = newSettings;
+    pendingUninstalls = <AppMeta>[];
+    currentTilePageIndex = 0;
+    tileEditMode = false;
+    query = '';
+    await _persistAll();
+    await applyStatusBarVisibility(showSystemStatusBar);
+    notifyListeners();
+  }
+
+  /// Wipe all local data and start fresh.
+  Future<void> clearAllData() async {
+    meta = <String, AppMeta>{};
+    categories = <AppCategory>[];
+    snapshots = <Snapshot>[];
+    backupLists = <BackupList>[];
+    tiles = <Tile>[];
+    tilePages = [
+      TilePage(
+        id: _newId(),
+        name: '页面 1',
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+      )
+    ];
+    apps = <AppInfo>[];
+    settings = <String, dynamic>{};
+    pendingUninstalls = <AppMeta>[];
+    currentTilePageIndex = 0;
+    tileEditMode = false;
+    query = '';
+    lastScanAt = null;
+    lastScanMs = 0;
+    await _persistAll();
+    await applyStatusBarVisibility(true);
+    notifyListeners();
+  }
+
+  Future<void> _persistAll() async {
+    await _persistMeta();
+    await _persistCategories();
+    await _persistSnapshots();
+    await _persistBackupLists();
+    await _persistTiles();
+    await _persistTilePages();
+    await _persistSettings();
+    await storage.writeJson(_kAppsCache, apps.map((a) => a.toMap()).toList());
   }
 
   /// Transient, board-wide edit mode. While on, tiles can be moved/resized and
