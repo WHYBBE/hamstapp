@@ -451,8 +451,15 @@ class _TileBoardState extends State<_TileBoard> {
         }).toList();
         final layout = resolveTileLayout(specs);
         final rows = layout.rows;
+        // While dragging, extend the board so the highlighted target row is
+        // always reachable (and the grid keeps drawing behind it).
+        final rowsShown = (_dragId != null && _dragRow + _dragH > rows)
+            ? _dragRow + _dragH
+            : rows;
         final boardHeight =
-            _pad * 2 + rows * cellW + (rows > 1 ? (rows - 1) * _gap : 0.0);
+            _pad * 2 +
+            rowsShown * cellW +
+            (rowsShown > 1 ? (rowsShown - 1) * _gap : 0.0);
 
         double x(int col) => _pad + col * (cellW + _gap);
         double y(int row) => _pad + row * (cellW + _gap);
@@ -470,6 +477,22 @@ class _TileBoardState extends State<_TileBoard> {
               // active Draggable and cancels the move. So the highlight slot is
               // always present in edit mode and only its content toggles.
               children: [
+                if (editable)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(
+                        painter: _TileGridPainter(
+                          cellW: cellW,
+                          gap: _gap,
+                          pad: _pad,
+                          cols: kTileCols,
+                          rows: rowsShown,
+                          color: Theme.of(context).colorScheme.outline
+                              .withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (editable)
                   Positioned(
                     left: x(_dragCol),
@@ -688,6 +711,53 @@ class _ResizeDrag extends Drag {
 
   @override
   void cancel() => onEnd();
+}
+
+/// Draws the 6-column cell grid while editing, so tiles can be placed against
+/// visible cells. Purely decorative (behind the tiles, ignores pointers).
+class _TileGridPainter extends CustomPainter {
+  _TileGridPainter({
+    required this.cellW,
+    required this.gap,
+    required this.pad,
+    required this.cols,
+    required this.rows,
+    required this.color,
+  });
+
+  final double cellW;
+  final double gap;
+  final double pad;
+  final int cols;
+  final int rows;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final unit = cellW + gap;
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        final rect = RRect.fromRectAndRadius(
+          Rect.fromLTWH(pad + c * unit, pad + r * unit, cellW, cellW),
+          const Radius.circular(8),
+        );
+        canvas.drawRRect(rect, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TileGridPainter old) =>
+      old.cellW != cellW ||
+      old.gap != gap ||
+      old.pad != pad ||
+      old.cols != cols ||
+      old.rows != rows ||
+      old.color != color;
 }
 
 /// Draws a small rounded corner border in the bottom-right corner.
