@@ -107,7 +107,7 @@ class SettingsScreen extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 4, 16, 24),
             child: Text(
-              '磁贴：在「快速启动 → 磁贴」点击右上角 ✏️ 进入编辑模式，'
+              '磁贴：在「启动 → 磁贴」点击右上角 ✏️ 进入编辑模式，'
               '长按磁贴拖动移动、拖动右下角缩放；完成后点击右上角「完成」退出。',
               style: TextStyle(fontSize: 13, height: 1.5),
             ),

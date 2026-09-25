@@ -41,28 +41,33 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
     final state = context.watch<AppState>();
     final editing = state.tileEditMode && _tabs.index == 0;
 
-    final tabBar = TabBar(
+    // The four sections live directly in the header (no title text) to save a
+    // whole row of vertical space.
+    final tabs = TabBar(
       controller: _tabs,
+      labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+      indicatorSize: TabBarIndicatorSize.label,
+      dividerColor: Colors.transparent,
+      labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      unselectedLabelStyle:
+          const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
       tabs: const [
-        Tab(icon: Icon(Icons.grid_view_rounded, size: 20), text: '磁贴'),
-        Tab(icon: Icon(Icons.category_outlined, size: 20), text: '分类'),
-        Tab(icon: Icon(Icons.star_outline, size: 20), text: '收藏'),
-        Tab(icon: Icon(Icons.history, size: 20), text: '最近'),
+        Tab(height: 40, text: '磁贴'),
+        Tab(height: 40, text: '分类'),
+        Tab(height: 40, text: '收藏'),
+        Tab(height: 40, text: '最近'),
       ],
     );
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: Text(editing ? '编辑磁贴' : '快速启动',
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+        titleSpacing: 8,
+        title: editing
+            ? const Text('编辑磁贴',
+                style: TextStyle(fontWeight: FontWeight.bold))
+            : tabs,
         actions: _actions(context, state, editing),
-        bottom: editing
-            ? PreferredSize(
-                preferredSize: tabBar.preferredSize,
-                child: AbsorbPointer(child: tabBar),
-              )
-            : tabBar,
       ),
       body: TabBarView(
         controller: _tabs,
