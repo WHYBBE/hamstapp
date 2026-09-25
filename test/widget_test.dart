@@ -539,6 +539,34 @@ void main() {
     expect(state.activeSyncSourceId, b.id);
   });
 
+  test('pin count / unpin are scoped to the current page', () async {
+    final state = AppState(_MemStorage());
+    state.tilePages = [
+      TilePage(id: 'p1', name: 'P1', createdAt: 0),
+      TilePage(id: 'p2', name: 'P2', createdAt: 0),
+    ];
+    state.apps = [_ai('com.x', 'X')];
+
+    state.currentTilePageIndex = 1;
+    await state.addTile('com.x', pageId: 'p1');
+    // Pinned on p1, but the current page is p2 -> not shown as pinned.
+    expect(state.pinCountOnCurrentPage('com.x'), 0);
+
+    state.currentTilePageIndex = 0;
+    expect(state.pinCountOnCurrentPage('com.x'), 1);
+
+    // Long-press adds another copy on the same page.
+    await state.addTile('com.x', pageId: 'p1');
+    expect(state.pinCountOnCurrentPage('com.x'), 2);
+
+    // Tap unpins one at a time.
+    expect(await state.removeOneTileOnCurrentPage('com.x'), isTrue);
+    expect(state.pinCountOnCurrentPage('com.x'), 1);
+    expect(await state.removeOneTileOnCurrentPage('com.x'), isTrue);
+    expect(state.pinCountOnCurrentPage('com.x'), 0);
+    expect(await state.removeOneTileOnCurrentPage('com.x'), isFalse);
+  });
+
   test('legacy single remote source migrates to a sync source', () async {
     final storage = _MemStorage();
     storage._data['settings'] = {

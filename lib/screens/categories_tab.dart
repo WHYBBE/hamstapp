@@ -91,7 +91,10 @@ void showCategoryApps(BuildContext context, AppState state, AppCategory c) {
   );
 }
 
-/// Bottom sheet to add pinned (tile) apps.
+/// Bottom sheet to pin/unpin apps on the currently visible tile page.
+///
+/// Tap: pin when not pinned on this page, otherwise unpin (remove one).
+/// Long-press: add another copy of the same app to this page.
 void showPinSheet(BuildContext context, AppState state) {
   showModalBottomSheet(
     context: context,
@@ -101,18 +104,45 @@ void showPinSheet(BuildContext context, AppState state) {
       return StatefulBuilder(
         builder: (ctx, setLocal) {
           final apps = AppSearch.rank(state.apps, query, limit: 150);
+          final pages = state.tilePages;
+          final pageIndex =
+              pages.isEmpty ? -1 : state.currentTilePageIndex.clamp(0, pages.length - 1);
+          final pageName = pageIndex < 0 ? '（无磁贴页）' : pages[pageIndex].name;
+
+          void snack(String text) {
+            final messenger = ScaffoldMessenger.of(context);
+            messenger.hideCurrentSnackBar();
+            messenger.showSnackBar(SnackBar(
+              content: Text(text),
+              duration: const Duration(milliseconds: 900),
+            ));
+          }
+
           return DraggableScrollableSheet(
             expand: false,
             initialChildSize: 0.8,
             builder: (ctx, scrollController) => Column(
               children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                   child: Align(
                     alignment: Alignment.centerLeft,
-                    child: Text('选择要置顶到磁贴的应用',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('固定到磁贴',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 2),
+                        Text(
+                          '当前页：$pageName · 点击固定/取消，长按再添加一个',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 Padding(
@@ -138,37 +168,46 @@ void showPinSheet(BuildContext context, AppState state) {
                     itemCount: apps.length,
                     itemBuilder: (context, i) {
                       final app = apps[i];
-                      final count = state.tiles
-                          .where((t) => t.packageName == app.packageName)
-                          .length;
+                      final count =
+                          state.pinCountOnCurrentPage(app.packageName);
+                      final pinned = count > 0;
                       return ListTile(
                         leading: AppIcon(
                             packageName: app.packageName, label: app.appName),
                         title: Text(app.appName),
                         subtitle: Text(app.packageName,
                             maxLines: 1, overflow: TextOverflow.ellipsis),
-                        trailing: count == 0
-                            ? const Icon(Icons.add_circle_outline,
-                                color: Colors.grey)
-                            : Row(
+                        trailing: pinned
+                            ? Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   const Icon(Icons.push_pin,
                                       color: Colors.orange, size: 18),
-                                  const SizedBox(width: 4),
-                                  Text('$count'),
+                                  if (count > 1) ...[
+                                    const SizedBox(width: 4),
+                                    Text('×$count'),
+                                  ],
                                 ],
-                              ),
+                              )
+                            : const Icon(Icons.add_circle_outline,
+                                color: Colors.grey),
                         onTap: () {
+                          if (pinned) {
+                            state.removeOneTileOnCurrentPage(app.packageName);
+                            setLocal(() {});
+                            snack('已取消固定');
+                          } else {
+                            state.addTile(app.packageName,
+                                pageId: state.currentTilePageId);
+                            setLocal(() {});
+                            snack('已固定到「$pageName」');
+                          }
+                        },
+                        onLongPress: () {
                           state.addTile(app.packageName,
                               pageId: state.currentTilePageId);
                           setLocal(() {});
-                          final messenger = ScaffoldMessenger.of(context);
-                          messenger.hideCurrentSnackBar();
-                          messenger.showSnackBar(const SnackBar(
-                            content: Text('已添加到当前磁贴页（可重复添加）'),
-                            duration: Duration(milliseconds: 900),
-                          ));
+                          snack('已再添加一个到「$pageName」');
                         },
                       );
                     },

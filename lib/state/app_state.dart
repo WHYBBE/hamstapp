@@ -658,6 +658,41 @@ class AppState extends ChangeNotifier {
 
   int pinCountOnPage(TilePage page) => tilesOnPage(page).length;
 
+  /// Normalised page id for a tile (invalid/missing ids fall back to page 1).
+  String _normalizedPageId(Tile tile) {
+    final firstId = tilePages.isEmpty ? '' : tilePages.first.id;
+    final validIds = tilePages.map((p) => p.id).toSet();
+    return validIds.contains(tile.pageId) ? tile.pageId : firstId;
+  }
+
+  /// Number of tiles for [packageName] on the currently visible page only.
+  int pinCountOnCurrentPage(String packageName) {
+    if (tilePages.isEmpty) return 0;
+    final currentId = currentTilePageId;
+    return tiles
+        .where((t) =>
+            t.packageName == packageName && _normalizedPageId(t) == currentId)
+        .length;
+  }
+
+  /// Removes a single tile for [packageName] from the current page.
+  /// Returns false when the app is not pinned on this page.
+  Future<bool> removeOneTileOnCurrentPage(String packageName) async {
+    if (tilePages.isEmpty) return false;
+    final currentId = currentTilePageId;
+    final index = tiles.indexWhere(
+      (t) =>
+          t.packageName == packageName && _normalizedPageId(t) == currentId,
+    );
+    if (index < 0) return false;
+    tiles.removeAt(index);
+    _syncPinned(packageName);
+    await _persistTiles();
+    await _persistMeta();
+    notifyListeners();
+    return true;
+  }
+
   /// Add a tile for [packageName] on [pageId] (defaults to the current page).
   /// Duplicates are allowed: the same app can be added any number of times.
   Future<Tile> addTile(String packageName, {String? pageId}) async {
