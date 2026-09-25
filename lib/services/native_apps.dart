@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/app_info.dart';
 
 /// Thin wrapper over the native `hamstapp/apps` MethodChannel.
@@ -124,7 +125,9 @@ class NativeApps {
         'modified': modified,
         'downloadId': id,
       });
-      if (path == null || path.isEmpty) throw StateError('下载失败');
+      if (path == null || path.isEmpty) {
+        throw StateError(AppStrings.current.t('下载失败'));
+      }
       return path;
     } finally {
       _downloadProgress.remove(id);

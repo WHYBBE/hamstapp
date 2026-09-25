@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/snapshot.dart';
 import '../models/snapshot_diff.dart';
 import '../state/app_state.dart';
@@ -36,17 +37,18 @@ class _CompareScreenState extends State<CompareScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.strings;
     final tabs = <Tab>[
-      Tab(text: '新增 ${_diff.added.length}'),
-      Tab(text: '卸载 ${_diff.removed.length}'),
-      Tab(text: '更新 ${_diff.updated.length}'),
+      Tab(text: s.t('新增 {n}', {'n': _diff.added.length})),
+      Tab(text: s.t('卸载 {n}', {'n': _diff.removed.length})),
+      Tab(text: s.t('更新 {n}', {'n': _diff.updated.length})),
     ];
 
     return DefaultTabController(
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('列表差异'),
+          title: Text(s.t('列表差异')),
           bottom: TabBar(
             tabs: tabs,
             isScrollable: true,
@@ -54,7 +56,7 @@ class _CompareScreenState extends State<CompareScreen> {
           ),
           actions: [
             IconButton(
-              tooltip: _showUnchanged ? '隐藏未变化' : '显示未变化',
+              tooltip: _showUnchanged ? s.t('隐藏未变化') : s.t('显示未变化'),
               icon: Icon(_showUnchanged ? Icons.visibility : Icons.visibility_off),
               onPressed: () => setState(() => _showUnchanged = !_showUnchanged),
             ),
@@ -70,13 +72,13 @@ class _CompareScreenState extends State<CompareScreen> {
             Expanded(
               child: TabBarView(
                 children: [
-                  _DiffList(items: _diff.added, emptyText: '没有新增应用', unchanged: _showUnchanged ? _diff.unchanged : null),
+                  _DiffList(items: _diff.added, emptyText: s.t('没有新增应用'), unchanged: _showUnchanged ? _diff.unchanged : null),
                   _DiffList(
                     items: _diff.removed,
-                    emptyText: '没有卸载应用',
+                    emptyText: s.t('没有卸载应用'),
                     allowUninstallReason: true,
                   ),
-                  _DiffList(items: _diff.updated, emptyText: '没有应用更新', showVersion: true),
+                  _DiffList(items: _diff.updated, emptyText: s.t('没有应用更新'), showVersion: true),
                 ],
               ),
             ),
@@ -111,21 +113,33 @@ class _CompareHeader extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text('基准：$olderLabel',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                child: Text(
+                  context.strings.t('基准：{label}', {'label': olderLabel}),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
               const Icon(Icons.arrow_forward, size: 16),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('对比：$newerLabel',
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                child: Text(
+                  context.strings.t('对比：{label}', {'label': newerLabel}),
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            '共 ${diff.changedCount} 处变化 · 新增 ${diff.added.length} · 卸载 ${diff.removed.length} · 更新 ${diff.updated.length}',
+            context.strings.t(
+              '共 {n} 处变化 · 新增 {a} · 卸载 {r} · 更新 {u}',
+              {
+                'n': diff.changedCount,
+                'a': diff.added.length,
+                'r': diff.removed.length,
+                'u': diff.updated.length,
+              },
+            ),
             style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
           ),
         ],
@@ -179,8 +193,10 @@ class _DiffList extends StatelessWidget {
           const Divider(),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: Text('未变化 (${unchanged!.length})',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+            child: Text(
+              context.strings.t('未变化 ({n})', {'n': unchanged!.length}),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
           ),
           ...unchanged!.map((e) => _DiffTile(item: e, showVersion: false)),
         ],
@@ -226,7 +242,9 @@ class _DiffTile extends StatelessWidget {
       isThreeLine: uninstallReason.isNotEmpty,
       trailing: onEditReason != null
           ? IconButton(
-              tooltip: uninstallReason.isEmpty ? '添加卸载原因' : '编辑卸载原因',
+              tooltip: uninstallReason.isEmpty
+                  ? context.strings.t('添加卸载原因')
+                  : context.strings.t('编辑卸载原因'),
               icon: Icon(
                 uninstallReason.isEmpty ? Icons.edit_outlined : Icons.check_circle,
                 color: uninstallReason.isEmpty ? Colors.grey : Colors.green,

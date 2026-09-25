@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/app_info.dart';
 import '../models/backup_list.dart';
 import '../state/app_state.dart';
@@ -21,11 +22,13 @@ class BackupListsTab extends StatelessWidget {
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
     if (lists.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(32),
+          padding: const EdgeInsets.all(32),
           child: Text(
-            '还没有备份列表。\n把重要 / 想长期跟踪的应用放进列表，\n随时知道它们是否还在设备上。',
+            context.strings.t(
+              '还没有备份列表。\n把重要 / 想长期跟踪的应用放进列表，\n随时知道它们是否还在设备上。',
+            ),
             textAlign: TextAlign.center,
           ),
         ),
@@ -36,6 +39,7 @@ class BackupListsTab extends StatelessWidget {
       itemCount: lists.length,
       itemBuilder: (context, i) {
         final b = lists[i];
+        final s = context.strings;
         final installed = b.packageNames
             .where((p) => state.appByPackage(p) != null)
             .length;
@@ -47,19 +51,25 @@ class BackupListsTab extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
           subtitle: Text(
-            '${b.packageNames.length} 个应用 · 已安装 $installed'
-            '${missing > 0 ? ' · 缺失 $missing' : ''}\n'
-            '更新于 ${Fmt.dateTime(b.updatedAt)}'
+            '${s.t('{n} 个应用 · 已安装 {installed}', {
+                  'n': b.packageNames.length,
+                  'installed': installed,
+                })}'
+            '${missing > 0 ? s.t(' · 缺失 {n}', {'n': missing}) : ''}\n'
+            '${s.t('更新于 {ago}', {'ago': Fmt.dateTime(b.updatedAt)})}'
             '${b.description.isNotEmpty ? ' · ${b.description}' : ''}',
           ),
           isThreeLine: true,
           trailing: PopupMenuButton<String>(
             onSelected: (v) => _onBackupListAction(context, state, b, v),
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'open', child: Text('打开')),
-              PopupMenuItem(value: 'backup', child: Text('备份当前全部应用')),
-              PopupMenuItem(value: 'rename', child: Text('重命名')),
-              PopupMenuItem(value: 'delete', child: Text('删除')),
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'open', child: Text(s.t('打开'))),
+              PopupMenuItem(
+                value: 'backup',
+                child: Text(s.t('备份当前全部应用')),
+              ),
+              PopupMenuItem(value: 'rename', child: Text(s.t('重命名'))),
+              PopupMenuItem(value: 'delete', child: Text(s.t('删除'))),
             ],
           ),
           onTap: () => openBackupListDetail(context, b),
@@ -72,36 +82,37 @@ class BackupListsTab extends StatelessWidget {
 Future<void> createBackupList(BuildContext context, AppState state) async {
   final nameController = TextEditingController();
   final descController = TextEditingController();
+  final s = context.strings;
   final created = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('新建备份列表'),
+      title: Text(s.t('新建备份列表')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             controller: nameController,
             autofocus: true,
-            decoration: const InputDecoration(
-              labelText: '名称',
-              hintText: '例如：常用工具、必装应用',
+            decoration: InputDecoration(
+              labelText: s.t('名称'),
+              hintText: s.t('例如：常用工具、必装应用'),
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: descController,
-            decoration: const InputDecoration(labelText: '描述（可选）'),
+            decoration: InputDecoration(labelText: s.t('描述（可选）')),
           ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('取消'),
+          child: Text(s.t('取消')),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('创建'),
+          child: Text(s.t('创建')),
         ),
       ],
     ),
@@ -121,6 +132,7 @@ Future<void> _onBackupListAction(
   BackupList b,
   String action,
 ) async {
+  final s = context.strings;
   switch (action) {
     case 'open':
       openBackupListDetail(context, b);
@@ -129,19 +141,22 @@ Future<void> _onBackupListAction(
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('备份当前全部应用'),
+          title: Text(s.t('备份当前全部应用')),
           content: Text(
-            '将把当前扫描到的 ${state.apps.length} 个应用全部加入「${b.name}」，'
-            '并替换原有内容。',
+            s.t('将把当前扫描到的 {n} 个应用全部加入「{list}」，', {
+                  'n': state.apps.length,
+                  'list': b.name,
+                }) +
+                s.t('并替换原有内容。'),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('取消'),
+              child: Text(s.t('取消')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('确定'),
+              child: Text(s.t('确定')),
             ),
           ],
         ),
@@ -153,16 +168,16 @@ Future<void> _onBackupListAction(
       final name = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('重命名'),
+          title: Text(s.t('重命名')),
           content: TextField(controller: controller, autofocus: true),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
+              child: Text(s.t('取消')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-              child: const Text('保存'),
+              child: Text(s.t('保存')),
             ),
           ],
         ),
@@ -175,16 +190,16 @@ Future<void> _onBackupListAction(
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('删除备份列表'),
-          content: Text('确定删除「${b.name}」吗？'),
+          title: Text(s.t('删除备份列表')),
+          content: Text(s.t('确定删除「{name}」吗？', {'name': b.name})),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('取消'),
+              child: Text(s.t('取消')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('删除'),
+              child: Text(s.t('删除')),
             ),
           ],
         ),
@@ -224,7 +239,7 @@ class BackupListDetailScreen extends StatelessWidget {
         title: Text(list.name),
         actions: [
           IconButton(
-            tooltip: '添加应用',
+            tooltip: context.strings.t('添加应用'),
             icon: const Icon(Icons.add),
             onPressed: () => _showAddSheet(context, state, list),
           ),
@@ -235,7 +250,14 @@ class BackupListDetailScreen extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: Text(
-              '共 ${list.packageNames.length} 个 · 已安装 ${members.length} · 缺失 ${missing.length}',
+              context.strings.t(
+                '共 {total} 个 · 已安装 {installed} · 缺失 {missing}',
+                {
+                  'total': list.packageNames.length,
+                  'installed': members.length,
+                  'missing': missing.length,
+                },
+              ),
               style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
             ),
           ),
@@ -254,7 +276,7 @@ class BackupListDetailScreen extends StatelessWidget {
               state: state,
               trailing: IconButton(
                 icon: const Icon(Icons.remove_circle_outline),
-                tooltip: '移出列表',
+                tooltip: context.strings.t('移出列表'),
                 onPressed: () =>
                     state.toggleBackupMember(list.id, app.packageName),
               ),
@@ -265,7 +287,9 @@ class BackupListDetailScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Text(
-                '未安装 / 已卸载 (${missing.length})',
+                context.strings.t('未安装 / 已卸载 ({n})', {
+                  'n': missing.length,
+                }),
                 style: TextStyle(
                   color: Colors.grey.shade700,
                   fontWeight: FontWeight.w700,
@@ -274,6 +298,7 @@ class BackupListDetailScreen extends StatelessWidget {
             ),
             ...missing.map((p) {
               final meta = state.metaFor(p);
+              final s = context.strings;
               return ListTile(
                 leading: const CircleAvatar(
                   backgroundColor: Color(0x22FF0000),
@@ -287,8 +312,14 @@ class BackupListDetailScreen extends StatelessWidget {
                   meta.uninstallReason.isNotEmpty
                       ? '🗑️ ${meta.uninstallReason}\n$p'
                       : (meta.reason.isNotEmpty
-                            ? '安装原因：${meta.reason}\n$p'
-                            : '$p\n该应用当前不在设备上，点击记录卸载原因'),
+                            ? s.t('安装原因：{reason}\n{pkg}', {
+                                'reason': meta.reason,
+                                'pkg': p,
+                              })
+                            : s.t(
+                                '{pkg}\n该应用当前不在设备上，点击记录卸载原因',
+                                {'pkg': p},
+                              )),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -338,7 +369,7 @@ class BackupListDetailScreen extends StatelessWidget {
                       autofocus: true,
                       onChanged: (v) => setLocal(() => query = v),
                       decoration: InputDecoration(
-                        hintText: '搜索要加入的应用',
+                        hintText: context.strings.t('搜索要加入的应用'),
                         prefixIcon: const Icon(Icons.search),
                         filled: true,
                         isDense: true,

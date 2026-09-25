@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:hamstapp/l10n/app_strings.dart';
 import 'package:hamstapp/models/app_info.dart';
 import 'package:hamstapp/models/app_meta.dart';
 import 'package:hamstapp/models/remote_source.dart';
@@ -396,6 +397,28 @@ void main() {
     await reopened.init();
     expect(reopened.themeMode, AppThemeMode.dark);
     expect(reopened.themeColor, kThemeColorPresets[4]);
+  });
+
+  test('language setting resolves and translates', () async {
+    addTearDown(() => AppStrings.current = const AppStrings('zh'));
+    final state = AppState(_MemStorage());
+    expect(state.language, AppLanguage.system);
+    // Explicit languages ignore the device locale.
+    await state.setLanguage(AppLanguage.zh);
+    expect(state.resolvedLanguageCode, 'zh');
+    await state.setLanguage(AppLanguage.en);
+    expect(state.resolvedLanguageCode, 'en');
+    expect(AppStrings.current.t('取消'), 'Cancel');
+    expect(
+      AppStrings.current.t('已恢复 {count} 条应用的标注数据', {'count': 3}),
+      'Restored annotations for 3 apps',
+    );
+    expect(AppStrings.current.t('快照'), 'Snapshots');
+
+    // Round-trips through a fresh state backed by the same storage.
+    final reopened = AppState(state.storage);
+    await reopened.init();
+    expect(reopened.language, AppLanguage.en);
   });
 
   test('removing one duplicate keeps the others', () async {

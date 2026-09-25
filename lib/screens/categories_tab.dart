@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/category.dart';
 import '../state/app_state.dart';
 import '../utils/actions.dart';
@@ -17,11 +18,11 @@ class CategoriesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (state.categories.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(32),
+          padding: const EdgeInsets.all(32),
           child: Text(
-            '还没有分类。\n点击右上角新建一个，再到应用详情里给应用归类。',
+            context.strings.t('还没有分类。\n点击右上角新建一个，再到应用详情里给应用归类。'),
             textAlign: TextAlign.center,
           ),
         ),
@@ -42,15 +43,21 @@ class CategoriesTab extends StatelessWidget {
           c.name,
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
-        subtitle: Text('$count 个应用'),
+        subtitle: Text(context.strings.t('{n} 个应用', {'n': count})),
         trailing: PopupMenuButton<String>(
           onSelected: (v) {
             if (v == 'edit') showCategoryEditor(context, state, c);
             if (v == 'delete') confirmDeleteCategory(context, state, c);
           },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'edit', child: Text('编辑')),
-            PopupMenuItem(value: 'delete', child: Text('删除')),
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              value: 'edit',
+              child: Text(context.strings.t('编辑')),
+            ),
+            PopupMenuItem(
+              value: 'delete',
+              child: Text(context.strings.t('删除')),
+            ),
           ],
         ),
         onTap: () => Navigator.push(
@@ -97,32 +104,33 @@ class _SortBar extends StatelessWidget {
   final int total;
   final bool manual;
 
-  static const _labels = {
-    CategorySort.manual: '手动排序',
-    CategorySort.name: '按名称',
-    CategorySort.count: '按应用数',
-  };
-
   @override
   Widget build(BuildContext context) {
     final hint = Theme.of(context).colorScheme.onSurfaceVariant;
+    final labels = {
+      CategorySort.manual: context.strings.t('手动排序'),
+      CategorySort.name: context.strings.t('按名称'),
+      CategorySort.count: context.strings.t('按应用数'),
+    };
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 6, 0),
       child: Row(
         children: [
-          Text('$total 个分类', style: TextStyle(fontSize: 12, color: hint)),
+          Text(context.strings.t('{n} 个分类', {'n': total}),
+              style: TextStyle(fontSize: 12, color: hint)),
           if (manual) ...[
             const SizedBox(width: 8),
-            Text('· 拖动行可排序', style: TextStyle(fontSize: 12, color: hint)),
+            Text(context.strings.t('· 拖动行可排序'),
+                style: TextStyle(fontSize: 12, color: hint)),
           ],
           const Spacer(),
           PopupMenuButton<CategorySort>(
-            tooltip: '分类排序',
+            tooltip: context.strings.t('分类排序'),
             icon: const Icon(Icons.sort, size: 20),
             initialValue: state.categorySort,
             onSelected: state.setCategorySort,
             itemBuilder: (_) => [
-              for (final e in _labels.entries)
+              for (final e in labels.entries)
                 CheckedPopupMenuItem(
                   value: e.key,
                   checked: state.categorySort == e.key,
@@ -167,7 +175,7 @@ class CategoryAppsScreen extends StatelessWidget {
         title: Text('${category.emoji} ${category.name}'),
         actions: [
           IconButton(
-            tooltip: '添加应用到该分类',
+            tooltip: context.strings.t('添加应用到该分类'),
             icon: const Icon(Icons.add),
             onPressed: () => showCategoryPicker(context, s, category),
           ),
@@ -178,7 +186,7 @@ class CategoryAppsScreen extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(32),
                 child: Text(
-                  '该分类下还没有应用\n点击右上角 ➕ 添加',
+                  context.strings.t('该分类下还没有应用\n点击右上角 ➕ 添加'),
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey.shade600),
                 ),
@@ -200,7 +208,7 @@ class CategoryAppsScreen extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   trailing: IconButton(
-                    tooltip: '移出分类',
+                    tooltip: context.strings.t('移出分类'),
                     icon: const Icon(Icons.remove_circle_outline),
                     onPressed: () {
                       final ids = List<String>.from(
@@ -261,7 +269,13 @@ void showCategoryPicker(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '添加到「${category.emoji} ${category.name}」',
+                            ctx.strings.t(
+                              '添加到「{emoji} {name}」',
+                              {
+                                'emoji': category.emoji,
+                                'name': category.name,
+                              },
+                            ),
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -269,7 +283,10 @@ void showCategoryPicker(
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '已添加 $memberCount 个应用 · 点击行切换',
+                            ctx.strings.t(
+                              '已添加 {count} 个应用 · 点击行切换',
+                              {'count': memberCount},
+                            ),
                             style: TextStyle(
                               fontSize: 12,
                               color: Theme.of(ctx).colorScheme.onSurfaceVariant,
@@ -285,7 +302,7 @@ void showCategoryPicker(
                       autofocus: true,
                       onChanged: (v) => setLocal(() => query = v),
                       decoration: InputDecoration(
-                        hintText: '搜索应用',
+                        hintText: ctx.strings.t('搜索应用'),
                         prefixIcon: const Icon(Icons.search),
                         filled: true,
                         isDense: true,
@@ -369,7 +386,9 @@ void showPinSheet(BuildContext context, AppState state) {
           final pageIndex = pages.isEmpty
               ? -1
               : state.currentTilePageIndex.clamp(0, pages.length - 1);
-          final pageName = pageIndex < 0 ? '（无磁贴页）' : pages[pageIndex].name;
+          final pageName = pageIndex < 0
+              ? ctx.strings.t('（无磁贴页）')
+              : pages[pageIndex].name;
 
           void snack(String text) {
             final messenger = ScaffoldMessenger.of(context);
@@ -394,16 +413,19 @@ void showPinSheet(BuildContext context, AppState state) {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          '固定到磁贴',
-                          style: TextStyle(
+                        Text(
+                          ctx.strings.t('固定到磁贴'),
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '当前页：$pageName · 点击固定/取消，长按再添加一个',
+                          ctx.strings.t(
+                            '当前页：{page} · 点击固定/取消，长按再添加一个',
+                            {'page': pageName},
+                          ),
                           style: TextStyle(
                             fontSize: 12,
                             color: Theme.of(ctx).colorScheme.onSurfaceVariant,
@@ -419,7 +441,7 @@ void showPinSheet(BuildContext context, AppState state) {
                     autofocus: true,
                     onChanged: (v) => setLocal(() => query = v),
                     decoration: InputDecoration(
-                      hintText: '搜索应用',
+                      hintText: ctx.strings.t('搜索应用'),
                       prefixIcon: const Icon(Icons.search),
                       filled: true,
                       isDense: true,
@@ -474,14 +496,18 @@ void showPinSheet(BuildContext context, AppState state) {
                           if (pinned) {
                             state.removeOneTileOnCurrentPage(app.packageName);
                             setLocal(() {});
-                            snack('已取消固定');
+                            snack(ctx.strings.t('已取消固定'));
                           } else {
                             state.addTile(
                               app.packageName,
                               pageId: state.currentTilePageId,
                             );
                             setLocal(() {});
-                            snack('已固定到「$pageName」');
+                            snack(
+                              ctx.strings.t('已固定到「{page}」', {
+                                'page': pageName,
+                              }),
+                            );
                           }
                         },
                         onLongPress: () {
@@ -490,7 +516,11 @@ void showPinSheet(BuildContext context, AppState state) {
                             pageId: state.currentTilePageId,
                           );
                           setLocal(() {});
-                          snack('已再添加一个到「$pageName」');
+                          snack(
+                            ctx.strings.t('已再添加一个到「{page}」', {
+                              'page': pageName,
+                            }),
+                          );
                         },
                       );
                     },

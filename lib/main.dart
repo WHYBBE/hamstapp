@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
+import 'l10n/app_strings.dart';
 import 'screens/home_screen.dart';
 import 'services/storage.dart';
 import 'state/app_state.dart';
@@ -36,8 +38,16 @@ class _AppRoot extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     return MaterialApp(
-      title: '囤囤',
+      onGenerateTitle: (context) => context.strings.appTitle,
       debugShowCheckedModeBanner: false,
+      locale: state.locale,
+      supportedLocales: const [Locale('zh'), Locale('en')],
+      localizationsDelegates: const [
+        AppStrings.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       themeMode: _themeMode(state.themeMode),
       theme: _buildTheme(Brightness.light, Color(state.themeColor)),
       darkTheme: _buildTheme(Brightness.dark, Color(state.themeColor)),

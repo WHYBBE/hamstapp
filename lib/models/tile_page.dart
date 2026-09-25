@@ -1,3 +1,5 @@
+import '../l10n/app_strings.dart';
+
 /// A named page on the tile board (like a Win8 start screen page).
 class TilePage {
   final String id;
@@ -12,7 +14,7 @@ class TilePage {
 
   factory TilePage.fromMap(Map<String, dynamic> map) => TilePage(
         id: map['id'] as String,
-        name: map['name'] as String? ?? '页面',
+        name: map['name'] as String? ?? AppStrings.current.t('页面'),
         createdAt: map['createdAt'] as int? ?? 0,
       );
 

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/app_info.dart';
 import '../models/tile.dart';
 import '../models/tile_page.dart';
@@ -57,11 +58,11 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
         fontSize: 13,
         fontWeight: FontWeight.w500,
       ),
-      tabs: const [
-        Tab(height: 40, text: '磁贴'),
-        Tab(height: 40, text: '分类'),
-        Tab(height: 40, text: '收藏'),
-        Tab(height: 40, text: '最近'),
+      tabs: [
+        Tab(height: 40, text: context.strings.t('磁贴')),
+        Tab(height: 40, text: context.strings.t('分类')),
+        Tab(height: 40, text: context.strings.t('收藏')),
+        Tab(height: 40, text: context.strings.t('最近')),
       ],
     );
 
@@ -73,7 +74,10 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
             : null,
         titleSpacing: 8,
         title: editing
-            ? const Text('编辑磁贴', style: TextStyle(fontWeight: FontWeight.bold))
+            ? Text(
+                context.strings.t('编辑磁贴'),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              )
             : tabs,
         actions: _actions(context, state, editing),
       ),
@@ -99,17 +103,18 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
   /// Exactly one action in normal mode per section, so the header tabs keep a
   /// constant width (the tile "+" only appears while editing).
   List<Widget> _actions(BuildContext context, AppState state, bool editing) {
+    final s = context.strings;
     if (_tabs.index == 0 && editing) {
       return [
         IconButton(
-          tooltip: '置顶应用到磁贴',
+          tooltip: s.t('置顶应用到磁贴'),
           icon: const Icon(Icons.add),
           onPressed: () => showPinSheet(context, state),
         ),
         TextButton.icon(
           onPressed: () => state.setTileEditMode(false),
           icon: const Icon(Icons.check, size: 18),
-          label: const Text('完成'),
+          label: Text(s.t('完成')),
         ),
         const SizedBox(width: 4),
       ];
@@ -118,17 +123,21 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
       case 0:
         return [
           IconButton(
-            tooltip: '编辑磁贴（添加/拖动/缩放）',
+            tooltip: s.t('编辑磁贴（添加/拖动/缩放）'),
             icon: const Icon(Icons.edit_outlined),
             onPressed: () {
               state.setTileEditMode(true);
               ScaffoldMessenger.of(context)
                 ..hideCurrentSnackBar()
                 ..showSnackBar(
-                  const SnackBar(
-                    content: Text('编辑模式：点右上角 ➕ 置顶应用，长按磁贴拖动移动，拖动右下角缩放；完成后点「完成」'),
+                  SnackBar(
+                    content: Text(
+                      s.t(
+                        '编辑模式：点右上角 ➕ 置顶应用，长按磁贴拖动移动，拖动右下角缩放；完成后点「完成」',
+                      ),
+                    ),
                     behavior: SnackBarBehavior.floating,
-                    duration: Duration(seconds: 4),
+                    duration: const Duration(seconds: 4),
                   ),
                 );
             },
@@ -137,7 +146,7 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
       case 1:
         return [
           IconButton(
-            tooltip: '新建分类',
+            tooltip: s.t('新建分类'),
             icon: const Icon(Icons.add),
             onPressed: () => showCategoryEditor(context, state, null),
           ),
@@ -145,7 +154,7 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
       case 2:
         return [
           IconButton(
-            tooltip: '添加收藏',
+            tooltip: s.t('添加收藏'),
             icon: const Icon(Icons.add),
             onPressed: () => showFavoriteSheet(context, state),
           ),
@@ -153,7 +162,7 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
       default:
         return [
           IconButton(
-            tooltip: '排序 / 时间筛选',
+            tooltip: s.t('排序 / 时间筛选'),
             icon: const Icon(Icons.tune),
             onPressed: () => _showRecentFilterSheet(context),
           ),
@@ -163,6 +172,7 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
 
   Future<void> _showRecentFilterSheet(BuildContext context) async {
     final ranges = _recentRanges();
+    final s = context.strings;
     await showModalBottomSheet<void>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -171,16 +181,16 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                 child: Text(
-                  '最近 · 排序与筛选',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  s.t('最近 · 排序与筛选'),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
               ListTile(
                 leading: const Icon(Icons.schedule),
-                title: const Text('按时间排序'),
+                title: Text(s.t('按时间排序')),
                 trailing: _recentSort == RecentSort.recent
                     ? const Icon(Icons.check)
                     : null,
@@ -191,7 +201,7 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
               ),
               ListTile(
                 leading: const Icon(Icons.bar_chart),
-                title: const Text('按频次排序'),
+                title: Text(s.t('按频次排序')),
                 trailing: _recentSort == RecentSort.frequent
                     ? const Icon(Icons.check)
                     : null,
@@ -201,11 +211,11 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
                 },
               ),
               const Divider(height: 1),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                 child: Text(
-                  '时间段',
-                  style: TextStyle(fontWeight: FontWeight.w600),
+                  s.t('时间段'),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
               Padding(
@@ -233,14 +243,18 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
   }
 
   List<(String, int)> _recentRanges() {
+    final s = context.strings;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     return [
-      ('全部', 0),
-      ('今天', today.millisecondsSinceEpoch),
-      ('近 7 天', today.subtract(const Duration(days: 6)).millisecondsSinceEpoch),
+      (s.t('全部'), 0),
+      (s.t('今天'), today.millisecondsSinceEpoch),
       (
-        '近 30 天',
+        s.t('近 7 天'),
+        today.subtract(const Duration(days: 6)).millisecondsSinceEpoch,
+      ),
+      (
+        s.t('近 30 天'),
         today.subtract(const Duration(days: 29)).millisecondsSinceEpoch,
       ),
     ];
@@ -283,7 +297,11 @@ class _TilesTabState extends State<_TilesTab> {
     final state = widget.state;
     final pages = state.tilePages;
     if (pages.isEmpty) {
-      return _hint(context, icon: Icons.grid_view_rounded, text: '还没有磁贴页');
+      return _hint(
+        context,
+        icon: Icons.grid_view_rounded,
+        text: context.strings.t('还没有磁贴页'),
+      );
     }
     if (_index >= pages.length) _index = pages.length - 1;
 
@@ -432,7 +450,10 @@ class _TileBoardState extends State<_TileBoard> {
       return _hint(
         context,
         icon: Icons.grid_view_rounded,
-        text: '「${page.name}」还没有磁贴\n点击右上角 ✏️ 进入编辑，再点 ➕ 选择要置顶的应用',
+        text: context.strings.t(
+          '「{page}」还没有磁贴\n点击右上角 ✏️ 进入编辑，再点 ➕ 选择要置顶的应用',
+          {'page': page.name},
+        ),
       );
     }
 
@@ -515,7 +536,9 @@ class _TileBoardState extends State<_TileBoard> {
                           child: Padding(
                             padding: const EdgeInsets.all(24),
                             child: Text(
-                              '点右上角 ➕ 选择要置顶的应用\n长按拖动移动，拖右下角缩放',
+                              context.strings.t(
+                                '点右上角 ➕ 选择要置顶的应用\n长按拖动移动，拖右下角缩放',
+                              ),
                               textAlign: TextAlign.center,
                               style: TextStyle(color: Colors.grey.shade600),
                             ),
@@ -939,7 +962,7 @@ class _PageBar extends StatelessWidget {
           ),
           if (editing)
             IconButton(
-              tooltip: '新建磁贴页',
+              tooltip: context.strings.t('新建磁贴页'),
               icon: const Icon(Icons.add),
               onPressed: onAdd,
             ),
@@ -951,23 +974,24 @@ class _PageBar extends StatelessWidget {
 
 Future<TilePage?> _promptAddPage(BuildContext context, AppState state) async {
   final controller = TextEditingController();
+  final s = context.strings;
   final name = await showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('新建磁贴页'),
+      title: Text(s.t('新建磁贴页')),
       content: TextField(
         controller: controller,
         autofocus: true,
-        decoration: const InputDecoration(labelText: '页面名称'),
+        decoration: InputDecoration(labelText: s.t('页面名称')),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx),
-          child: const Text('取消'),
+          child: Text(s.t('取消')),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-          child: const Text('创建'),
+          child: Text(s.t('创建')),
         ),
       ],
     ),
@@ -983,6 +1007,7 @@ void _pageMenu(
   VoidCallback onChanged,
 ) {
   final page = state.tilePages[index];
+  final s = context.strings;
   final canLeft = index > 0;
   final canRight = index < state.tilePages.length - 1;
   showModalBottomSheet(
@@ -1005,7 +1030,10 @@ void _pageMenu(
                   ),
                 ),
                 Text(
-                  '第 ${index + 1} / ${state.tilePages.length} 页',
+                  s.t('第 {index} / {total} 页', {
+                    'index': index + 1,
+                    'total': state.tilePages.length,
+                  }),
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
               ],
@@ -1013,7 +1041,7 @@ void _pageMenu(
           ),
           ListTile(
             leading: const Icon(Icons.arrow_back),
-            title: const Text('左移（手动排序）'),
+            title: Text(s.t('左移（手动排序）')),
             enabled: canLeft,
             onTap: canLeft
                 ? () async {
@@ -1025,7 +1053,7 @@ void _pageMenu(
           ),
           ListTile(
             leading: const Icon(Icons.arrow_forward),
-            title: const Text('右移（手动排序）'),
+            title: Text(s.t('右移（手动排序）')),
             enabled: canRight,
             onTap: canRight
                 ? () async {
@@ -1038,24 +1066,24 @@ void _pageMenu(
           const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.drive_file_rename_outline),
-            title: const Text('重命名页面'),
+            title: Text(s.t('重命名页面')),
             onTap: () async {
               Navigator.pop(ctx);
               final controller = TextEditingController(text: page.name);
               final name = await showDialog<String>(
                 context: context,
                 builder: (dctx) => AlertDialog(
-                  title: const Text('重命名页面'),
+                  title: Text(s.t('重命名页面')),
                   content: TextField(controller: controller, autofocus: true),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(dctx),
-                      child: const Text('取消'),
+                      child: Text(s.t('取消')),
                     ),
                     FilledButton(
                       onPressed: () =>
                           Navigator.pop(dctx, controller.text.trim()),
-                      child: const Text('保存'),
+                      child: Text(s.t('保存')),
                     ),
                   ],
                 ),
@@ -1069,8 +1097,8 @@ void _pageMenu(
           if (state.tilePages.length > 1)
             ListTile(
               leading: const Icon(Icons.delete_outline),
-              title: const Text('删除页面'),
-              subtitle: const Text('页面上的磁贴会移回第一个页面'),
+              title: Text(s.t('删除页面')),
+              subtitle: Text(s.t('页面上的磁贴会移回第一个页面')),
               onTap: () async {
                 Navigator.pop(ctx);
                 await state.deleteTilePage(page.id);
@@ -1275,7 +1303,7 @@ class _Tile extends StatelessWidget {
             children: [
               ListTile(
                 leading: const Icon(Icons.info_outline),
-                title: const Text('应用详情'),
+                title: Text(context.strings.t('应用详情')),
                 onTap: () {
                   Navigator.pop(ctx);
                   Navigator.push(
@@ -1289,7 +1317,7 @@ class _Tile extends StatelessWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.push_pin_outlined),
-                title: const Text('移除该磁贴'),
+                title: Text(context.strings.t('移除该磁贴')),
                 onTap: () {
                   Navigator.pop(ctx);
                   state.removeTile(tile.id);
@@ -1326,13 +1354,13 @@ void showFavoriteSheet(BuildContext context, AppState state) {
             initialChildSize: 0.8,
             builder: (ctx, scrollController) => Column(
               children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      '添加收藏',
-                      style: TextStyle(
+                      context.strings.t('添加收藏'),
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
@@ -1345,7 +1373,7 @@ void showFavoriteSheet(BuildContext context, AppState state) {
                     autofocus: true,
                     onChanged: (v) => setLocal(() => query = v),
                     decoration: InputDecoration(
-                      hintText: '搜索应用',
+                      hintText: context.strings.t('搜索应用'),
                       prefixIcon: const Icon(Icons.search),
                       filled: true,
                       isDense: true,
@@ -1406,7 +1434,7 @@ class _FavoritesTab extends StatelessWidget {
       return _hint(
         context,
         icon: Icons.star_outline,
-        text: '还没有收藏的应用\n点击右上角 ➕ 添加，即可在这里一键启动',
+        text: context.strings.t('还没有收藏的应用\n点击右上角 ➕ 添加，即可在这里一键启动'),
       );
     }
     return GridView.builder(
@@ -1472,8 +1500,8 @@ class _RecentTab extends StatelessWidget {
         context,
         icon: Icons.history,
         text: sinceMillis > 0
-            ? '该时间段内没有启动记录\n可在右上角调整时间段'
-            : '还没有启动记录\n从囤囤里启动应用后会出现在这里',
+            ? context.strings.t('该时间段内没有启动记录\n可在右上角调整时间段')
+            : context.strings.t('还没有启动记录\n从囤囤里启动应用后会出现在这里'),
       );
     }
     return ListView.builder(
@@ -1485,7 +1513,10 @@ class _RecentTab extends StatelessWidget {
           leading: AppIcon(packageName: app.packageName, label: app.appName),
           title: Text(app.appName),
           subtitle: Text(
-            '启动 ${meta.launchCount} 次 · 上次 ${Fmt.relative(meta.lastLaunchedAt)}',
+            context.strings.t('启动 {count} 次 · 上次 {ago}', {
+              'count': meta.launchCount,
+              'ago': Fmt.relative(meta.lastLaunchedAt),
+            }),
           ),
           trailing: const Icon(Icons.rocket_launch_outlined, size: 20),
           onTap: () => launchApp(context, app.packageName),

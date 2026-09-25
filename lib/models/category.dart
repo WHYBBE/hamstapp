@@ -1,3 +1,5 @@
+import '../l10n/app_strings.dart';
+
 class AppCategory {
   final String id;
   String name;
@@ -13,7 +15,7 @@ class AppCategory {
 
   factory AppCategory.fromMap(Map<String, dynamic> map) => AppCategory(
         id: map['id'] as String,
-        name: map['name'] as String? ?? '未命名',
+        name: map['name'] as String? ?? AppStrings.current.t('未命名'),
         colorValue: map['colorValue'] as int? ?? 0xFF6C8CFF,
         emoji: map['emoji'] as String? ?? '📦',
       );

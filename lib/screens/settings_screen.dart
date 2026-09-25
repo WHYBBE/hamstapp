@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../services/native_apps.dart';
 import '../state/app_state.dart';
 import '../utils/backup_actions.dart';
@@ -21,31 +22,37 @@ class SettingsScreen extends StatelessWidget {
         leading: FloatingNavScope.activeOf(context)
             ? const FloatingNavButton()
             : null,
-        title: const Text('设置', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          context.strings.t('设置'),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
       ),
       body: ListView(
         children: [
-          const _SectionHeader('外观'),
+          _SectionHeader(context.strings.t('外观')),
           ListTile(
             leading: Icon(_themeModeIcon(state.themeMode)),
-            title: const Text('主题模式'),
-            subtitle: Text(_themeModeLabel(state.themeMode)),
+            title: Text(context.strings.t('主题模式')),
+            subtitle: Text(_themeModeLabel(context.strings, state.themeMode)),
             trailing: DropdownButton<AppThemeMode>(
               value: state.themeMode,
               underline: const SizedBox.shrink(),
               onChanged: (v) {
                 if (v != null) state.setThemeMode(v);
               },
-              items: const [
+              items: [
                 DropdownMenuItem(
                   value: AppThemeMode.system,
-                  child: Text('跟随系统'),
+                  child: Text(context.strings.t('跟随系统')),
                 ),
                 DropdownMenuItem(
                   value: AppThemeMode.light,
-                  child: Text('浅色'),
+                  child: Text(context.strings.t('浅色')),
                 ),
-                DropdownMenuItem(value: AppThemeMode.dark, child: Text('深色')),
+                DropdownMenuItem(
+                  value: AppThemeMode.dark,
+                  child: Text(context.strings.t('深色')),
+                ),
               ],
             ),
           ),
@@ -59,17 +66,45 @@ class SettingsScreen extends StatelessWidget {
                 border: Border.all(color: Colors.black12),
               ),
             ),
-            title: const Text('主题色'),
-            subtitle: const Text('选择一个预设色，或自定义任意颜色'),
+            title: Text(context.strings.t('主题色')),
+            subtitle: Text(context.strings.t('选择一个预设色，或自定义任意颜色')),
             onTap: () => showThemeColorPicker(context, state),
           ),
+          ListTile(
+            leading: const Icon(Icons.translate_outlined),
+            title: Text(context.strings.t('语言')),
+            subtitle: Text(_languageLabel(context.strings, state.language)),
+            trailing: DropdownButton<AppLanguage>(
+              value: state.language,
+              underline: const SizedBox.shrink(),
+              onChanged: (v) {
+                if (v != null) state.setLanguage(v);
+              },
+              items: [
+                DropdownMenuItem(
+                  value: AppLanguage.system,
+                  child: Text(context.strings.t('跟随系统')),
+                ),
+                DropdownMenuItem(
+                  value: AppLanguage.zh,
+                  child: Text(context.strings.t('中文')),
+                ),
+                DropdownMenuItem(
+                  value: AppLanguage.en,
+                  child: const Text('English'),
+                ),
+              ],
+            ),
+          ),
           const Divider(height: 1),
-          const _SectionHeader('系统'),
+          _SectionHeader(context.strings.t('系统')),
           SwitchListTile(
             value: state.showSystemStatusBar,
             onChanged: (v) => state.setShowSystemStatusBar(v),
-            title: const Text('显示系统状态栏'),
-            subtitle: const Text('关闭后隐藏系统状态栏，内容更沉浸；向下滑动可临时唤出'),
+            title: Text(context.strings.t('显示系统状态栏')),
+            subtitle: Text(
+              context.strings.t('关闭后隐藏系统状态栏，内容更沉浸；向下滑动可临时唤出'),
+            ),
             secondary: Icon(
               state.showSystemStatusBar
                   ? Icons.visibility_outlined
@@ -77,33 +112,47 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          const _SectionHeader('导航'),
+          _SectionHeader(context.strings.t('导航')),
           ListTile(
             leading: Icon(_navModeIcon(state.navMode)),
-            title: const Text('导航栏模式'),
-            subtitle: Text(_navModeLabel(state.navMode)),
+            title: Text(context.strings.t('导航栏模式')),
+            subtitle: Text(_navModeLabel(context.strings, state.navMode)),
             trailing: DropdownButton<NavMode>(
               value: state.navMode,
               underline: const SizedBox.shrink(),
               onChanged: (v) {
                 if (v != null) state.setNavMode(v);
               },
-              items: const [
-                DropdownMenuItem(value: NavMode.auto, child: Text('自动')),
-                DropdownMenuItem(value: NavMode.bottom, child: Text('底部')),
-                DropdownMenuItem(value: NavMode.rail, child: Text('侧边栏')),
-                DropdownMenuItem(value: NavMode.floating, child: Text('悬浮')),
+              items: [
+                DropdownMenuItem(
+                  value: NavMode.auto,
+                  child: Text(context.strings.t('自动')),
+                ),
+                DropdownMenuItem(
+                  value: NavMode.bottom,
+                  child: Text(context.strings.t('底部')),
+                ),
+                DropdownMenuItem(
+                  value: NavMode.rail,
+                  child: Text(context.strings.t('侧边栏')),
+                ),
+                DropdownMenuItem(
+                  value: NavMode.floating,
+                  child: Text(context.strings.t('悬浮')),
+                ),
               ],
             ),
           ),
           const Divider(height: 1),
-          const _SectionHeader('磁贴'),
+          _SectionHeader(context.strings.t('磁贴')),
           ListTile(
             leading: const Icon(Icons.grid_view_rounded),
-            title: const Text('新增磁贴默认大小'),
+            title: Text(context.strings.t('新增磁贴默认大小')),
             subtitle: Text(
-              '当前 ${state.tileDefaultSize}×${state.tileDefaultSize}，'
-              '置顶新应用时使用',
+              context.strings.t(
+                '当前 {size}×{size}，置顶新应用时使用',
+                {'size': state.tileDefaultSize},
+              ),
             ),
             trailing: DropdownButton<int>(
               value: state.tileDefaultSize,
@@ -120,10 +169,10 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          const _SectionHeader('高级'),
+          _SectionHeader(context.strings.t('高级')),
           ListTile(
             leading: const Icon(Icons.cloud_outlined),
-            title: const Text('同步（FTP / Samba / WebDAV）'),
+            title: Text(context.strings.t('同步（FTP / Samba / WebDAV）')),
             subtitle: Text(state.remoteSource.summary),
             onTap: () => Navigator.push(
               context,
@@ -131,17 +180,21 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          const _SectionHeader('数据备份'),
+          _SectionHeader(context.strings.t('数据备份')),
           ListTile(
             leading: const Icon(Icons.upload_file_outlined),
-            title: const Text('导出数据包'),
-            subtitle: const Text('把快照、磁贴、分组、备份列表等全部数据打包为单个文件'),
+            title: Text(context.strings.t('导出数据包')),
+            subtitle: Text(
+              context.strings.t('把快照、磁贴、分组、备份列表等全部数据打包为单个文件'),
+            ),
             onTap: () => exportData(context, state),
           ),
           ListTile(
             leading: const Icon(Icons.download_outlined),
-            title: const Text('导入数据包'),
-            subtitle: const Text('先清空当前数据，再完整导入（不支持部分导入）'),
+            title: Text(context.strings.t('导入数据包')),
+            subtitle: Text(
+              context.strings.t('先清空当前数据，再完整导入（不支持部分导入）'),
+            ),
             onTap: () => importData(context, state),
           ),
           ListTile(
@@ -149,31 +202,33 @@ class SettingsScreen extends StatelessWidget {
               Icons.delete_forever_outlined,
               color: Theme.of(context).colorScheme.error,
             ),
-            title: const Text('清空数据'),
-            subtitle: const Text('删除全部本地数据，无法恢复'),
+            title: Text(context.strings.t('清空数据')),
+            subtitle: Text(context.strings.t('删除全部本地数据，无法恢复')),
             onTap: () => clearData(context, state),
           ),
           const Divider(height: 1),
-          const _SectionHeader('关于'),
-          const ListTile(
-            leading: Icon(Icons.pets),
-            title: Text('囤囤 · Hamstapp'),
-            subtitle: Text('Android 应用管理器'),
+          _SectionHeader(context.strings.t('关于')),
+          ListTile(
+            leading: const Icon(Icons.pets),
+            title: Text(context.strings.t('囤囤 · Hamstapp')),
+            subtitle: Text(context.strings.t('Android 应用管理器')),
           ),
-          const ListTile(
-            leading: Icon(Icons.info_outline),
-            title: Text('版本'),
-            subtitle: Text('1.0.0'),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: Text(context.strings.t('版本')),
+            subtitle: const Text('1.0.0'),
           ),
           const _DeviceInfoTile(),
           const Divider(height: 1),
-          const _SectionHeader('提示'),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 4, 16, 24),
+          _SectionHeader(context.strings.t('提示')),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
             child: Text(
-              '磁贴：在「启动 → 磁贴」点击右上角 ✏️ 进入编辑模式，'
-              '长按磁贴拖动移动、拖动右下角缩放；完成后点击右上角「完成」退出。',
-              style: TextStyle(fontSize: 13, height: 1.5),
+              context.strings.t(
+                '磁贴：在「启动 → 磁贴」点击右上角 ✏️ 进入编辑模式，'
+                '长按磁贴拖动移动、拖动右下角缩放；完成后点击右上角「完成」退出。',
+              ),
+              style: const TextStyle(fontSize: 13, height: 1.5),
             ),
           ),
         ],
@@ -182,14 +237,25 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-String _themeModeLabel(AppThemeMode mode) {
+String _languageLabel(AppStrings s, AppLanguage lang) {
+  switch (lang) {
+    case AppLanguage.system:
+      return s.t('跟随系统语言');
+    case AppLanguage.zh:
+      return s.t('中文');
+    case AppLanguage.en:
+      return 'English';
+  }
+}
+
+String _themeModeLabel(AppStrings s, AppThemeMode mode) {
   switch (mode) {
     case AppThemeMode.system:
-      return '跟随系统深浅色';
+      return s.t('跟随系统深浅色');
     case AppThemeMode.light:
-      return '始终使用浅色';
+      return s.t('始终使用浅色');
     case AppThemeMode.dark:
-      return '始终使用深色';
+      return s.t('始终使用深色');
   }
 }
 
@@ -204,16 +270,16 @@ IconData _themeModeIcon(AppThemeMode mode) {
   }
 }
 
-String _navModeLabel(NavMode mode) {
+String _navModeLabel(AppStrings s, NavMode mode) {
   switch (mode) {
     case NavMode.auto:
-      return '自动：平板横屏用侧边栏，手机与竖屏用底部导航';
+      return s.t('自动：平板横屏用侧边栏，手机与竖屏用底部导航');
     case NavMode.bottom:
-      return '正常：底部导航栏（当前默认）';
+      return s.t('正常：底部导航栏（当前默认）');
     case NavMode.rail:
-      return '侧边栏：左侧竖排，适合平板';
+      return s.t('侧边栏：左侧竖排，适合平板');
     case NavMode.floating:
-      return '无导航栏：点右下角悬浮按钮展开导航';
+      return s.t('无导航栏：点右下角悬浮按钮展开导航');
   }
 }
 
@@ -260,11 +326,11 @@ class _DeviceInfoTile extends StatelessWidget {
       builder: (context, snap) {
         final info = snap.data;
         final text = info == null
-            ? '读取中…'
+            ? context.strings.t('读取中…')
             : '${info['manufacturer']} ${info['model']} · Android ${info['androidVersion']} (API ${info['sdkInt']})';
         return ListTile(
           leading: const Icon(Icons.phone_android),
-          title: const Text('设备'),
+          title: Text(context.strings.t('设备')),
           subtitle: Text(text),
         );
       },

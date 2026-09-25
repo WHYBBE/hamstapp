@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/app_info.dart';
 import '../models/remote_source.dart';
 import '../services/native_apps.dart';
@@ -70,16 +71,18 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除同步源'),
-        content: Text('确定删除「${source.displayName}」吗？'),
+        title: Text(ctx.strings.t('删除同步源')),
+        content: Text(
+          ctx.strings.t('确定删除「{name}」吗？', {'name': source.displayName}),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(ctx.strings.t('取消')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除'),
+            child: Text(ctx.strings.t('删除')),
           ),
         ],
       ),
@@ -91,16 +94,16 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('清除下载缓存'),
-        content: const Text('删除已缓存的 APK 与信息，下次安装会重新下载。'),
+        title: Text(ctx.strings.t('清除下载缓存')),
+        content: Text(ctx.strings.t('删除已缓存的 APK 与信息，下次安装会重新下载。')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(ctx.strings.t('取消')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('清除'),
+            child: Text(ctx.strings.t('清除')),
           ),
         ],
       ),
@@ -111,7 +114,13 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
     setState(() => _cacheEpoch++);
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('已清除缓存（${Fmt.size(freed)}）')));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            context.strings.t('已清除缓存（{size}）', {'size': Fmt.size(freed)}),
+          ),
+        ),
+      );
   }
 
   @override
@@ -121,10 +130,13 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('同步', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          context.strings.t('同步'),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
-            tooltip: '新建同步源',
+            tooltip: context.strings.t('新建同步源'),
             icon: const Icon(Icons.add),
             onPressed: () => _openEditor(null),
           ),
@@ -141,26 +153,26 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
                     _confirmClearCache();
                 }
               },
-              itemBuilder: (_) => const [
+              itemBuilder: (_) => [
                 PopupMenuItem(
                   value: 'edit',
                   child: ListTile(
-                    leading: Icon(Icons.edit_outlined),
-                    title: Text('编辑当前源'),
+                    leading: const Icon(Icons.edit_outlined),
+                    title: Text(context.strings.t('编辑当前源')),
                   ),
                 ),
                 PopupMenuItem(
                   value: 'delete',
                   child: ListTile(
-                    leading: Icon(Icons.delete_outline),
-                    title: Text('删除当前源'),
+                    leading: const Icon(Icons.delete_outline),
+                    title: Text(context.strings.t('删除当前源')),
                   ),
                 ),
                 PopupMenuItem(
                   value: 'clear',
                   child: ListTile(
-                    leading: Icon(Icons.cleaning_services_outlined),
-                    title: Text('清除下载缓存'),
+                    leading: const Icon(Icons.cleaning_services_outlined),
+                    title: Text(context.strings.t('清除下载缓存')),
                   ),
                 ),
               ],
@@ -205,18 +217,23 @@ class _EmptySync extends StatelessWidget {
           children: [
             const Icon(Icons.cloud_sync_outlined, size: 56),
             const SizedBox(height: 12),
-            const Text('还没有同步源', style: TextStyle(fontSize: 16)),
+            Text(
+              context.strings.t('还没有同步源'),
+              style: const TextStyle(fontSize: 16),
+            ),
             const SizedBox(height: 6),
-            const Text(
-              '添加局域网 / NAS 上的 FTP、Samba 或 WebDAV 目录，\n自动递归查找其中的 APK 并一键安装。',
+            Text(
+              context.strings.t(
+                '添加局域网 / NAS 上的 FTP、Samba 或 WebDAV 目录，\n自动递归查找其中的 APK 并一键安装。',
+              ),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, height: 1.5),
+              style: const TextStyle(fontSize: 13, height: 1.5),
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: onAdd,
               icon: const Icon(Icons.add),
-              label: const Text('新建同步源'),
+              label: Text(context.strings.t('新建同步源')),
             ),
           ],
         ),
@@ -308,6 +325,7 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
   }
 
   Future<void> _install(Map<String, dynamic> f) async {
+    final s = context.strings;
     final key = (f['path'] as String?) ?? (f['name'] as String? ?? '');
     setState(() {
       _installing.add(key);
@@ -328,10 +346,12 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
       // Refresh this entry's metadata/icon from the (now populated) cache.
       await _refreshCache();
       final ok = await NativeApps.installApk(local);
-      if (!ok) throw StateError('无法调起系统安装器');
-      _snack('已交给系统安装器：${f['name']}');
+      if (!ok) throw StateError(s.t('无法调起系统安装器'));
+      _snack(
+        s.t('已交给系统安装器：{path}', {'path': f['name']}),
+      );
     } catch (e) {
-      _snack('安装失败：$e');
+      _snack(s.t('安装失败：{error}', {'error': e}));
     } finally {
       if (mounted) {
         setState(() {
@@ -345,6 +365,7 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
   /// Downloads and parses an APK (without installing) so its full metadata
   /// and icon become visible in the list.
   Future<void> _fetchInfo(Map<String, dynamic> f) async {
+    final s = context.strings;
     final key = (f['path'] as String?) ?? (f['name'] as String? ?? '');
     if (_installing.contains(key)) return;
     setState(() {
@@ -364,9 +385,9 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
         },
       );
       await _refreshCache();
-      _snack('已获取 APK 信息');
+      _snack(s.t('已获取 APK 信息'));
     } catch (e) {
-      _snack('获取信息失败：$e');
+      _snack(s.t('获取信息失败：{error}', {'error': e}));
     } finally {
       if (mounted) {
         setState(() {
@@ -416,16 +437,19 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
     if (_error != null) {
       return _Message(
         icon: Icons.cloud_off,
-        text: '加载失败\n$_error',
-        actionLabel: '重试',
+        text: context.strings.t('加载失败\n{error}', {'error': _error}),
+        actionLabel: context.strings.t('重试'),
         onAction: _load,
       );
     }
     if (_files.isEmpty) {
       return _Message(
         icon: Icons.folder_open,
-        text: '没有找到 APK\n${widget.source.summary}',
-        actionLabel: '刷新',
+        text: context.strings.t(
+          '没有找到 APK\n{summary}',
+          {'summary': widget.source.summary},
+        ),
+        actionLabel: context.strings.t('刷新'),
         onAction: _load,
       );
     }
@@ -481,13 +505,21 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
 
     final title = rel == name ? name : rel;
     final subtitleLines = <String>[
-      if (apkName.isNotEmpty) 'APK：$apkName',
+      if (apkName.isNotEmpty)
+        context.strings.t('APK：{name}', {'name': apkName}),
       '${Fmt.size(size)}'
           '${remoteModified > 0 ? ' · ${Fmt.relative(remoteModified)}' : ''}',
-      if (pkg.isNotEmpty) '包名：$pkg',
-      if (apkVersion.isNotEmpty) '版本：$apkVersion${apkVersionCode > 0 ? ' ($apkVersionCode)' : ''}',
+      if (pkg.isNotEmpty) context.strings.t('包名：{pkg}', {'pkg': pkg}),
+      if (apkVersion.isNotEmpty)
+        context.strings.t('版本：{version}{code}', {
+          'version': apkVersion,
+          'code': apkVersionCode > 0 ? ' ($apkVersionCode)' : '',
+        }),
       if (installed != null)
-        '已安装：${installed.appName} v${installed.versionName}',
+        context.strings.t('已安装：{name} v{version}', {
+          'name': installed.appName,
+          'version': installed.versionName,
+        }),
       if (minSdk > 0) 'minSdk $minSdk',
     ];
 
@@ -512,7 +544,9 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : IconButton(
-                  tooltip: installed == null ? '安装' : '更新',
+                  tooltip: installed == null
+                      ? context.strings.t('安装')
+                      : context.strings.t('更新'),
                   icon: const Icon(Icons.download_for_offline_outlined),
                   onPressed: () => _install(f),
                 ),
@@ -542,7 +576,7 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
               if (meta != null) ...[
                 const SizedBox(width: 8),
                 Text(
-                  '已缓存',
+                  context.strings.t('已缓存'),
                   style: TextStyle(
                     fontSize: 12,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -600,21 +634,37 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
       // Without parsed metadata we cannot tell whether it is a new app or a
       // package we simply could not match, so don't claim "新安装".
       if (!identityKnown) {
-        return ('未获取信息（长按解析）', scheme.onSurfaceVariant);
+        return (context.strings.t('未获取信息（长按解析）'), scheme.onSurfaceVariant);
       }
-      return ('新安装', scheme.primary);
+      return (context.strings.t('新安装'), scheme.primary);
     }
     if (!identityKnown || apkVersionCode <= 0) {
-      return ('更新（版本未知）', Colors.orange);
+      return (context.strings.t('更新（版本未知）'), Colors.orange);
     }
     final currentCode = installed.versionCode;
     if (apkVersionCode > currentCode) {
-      return ('可更新 v${installed.versionName} → $apkVersionCode', Colors.green);
+      return (
+        context.strings.t('可更新 {from} → {to}', {
+          'from': 'v${installed.versionName}',
+          'to': apkVersionCode,
+        }),
+        Colors.green,
+      );
     }
     if (apkVersionCode == currentCode) {
-      return ('已是最新 (${installed.versionName})', scheme.onSurfaceVariant);
+      return (
+        context.strings.t('已是最新 ({version})', {
+          'version': installed.versionName,
+        }),
+        scheme.onSurfaceVariant,
+      );
     }
-    return ('已安装更高版本 (${installed.versionName})', Colors.redAccent);
+    return (
+      context.strings.t('已安装更高版本 ({version})', {
+        'version': installed.versionName,
+      }),
+      Colors.redAccent,
+    );
   }
 
   static AppInfo? _matchInstalled(List<AppInfo> apps, String fileName) {
@@ -646,8 +696,12 @@ class _SourceHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '发现 $count 个 APK'
-            '${cacheBytes > 0 ? ' · 缓存 ${Fmt.size(cacheBytes)}' : ''}',
+            context.strings.t('发现 {n} 个 APK', {'n': count}) +
+                (cacheBytes > 0
+                    ? context.strings.t(' · 缓存 {size}', {
+                        'size': Fmt.size(cacheBytes),
+                      })
+                    : ''),
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
@@ -660,7 +714,7 @@ class _SourceHeader extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '点击安装，长按可先下载解析 APK 信息（名称/版本/包名）',
+            context.strings.t('点击安装，长按可先下载解析 APK 信息（名称/版本/包名）'),
             style: TextStyle(
               fontSize: 11,
               color: theme.colorScheme.onSurfaceVariant,

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../l10n/app_strings.dart';
 import '../models/remote_source.dart';
 import 'native_apps.dart';
 
@@ -186,7 +187,13 @@ class RemoteClient {
       if (code >= 300 && code < 400) {
         final loc = resp.headers.value(HttpHeaders.locationHeader);
         if (loc == null || attempt == 5) {
-          throw HttpException('HTTP $code（重定向但无 Location）', uri: target);
+          throw HttpException(
+            AppStrings.current.t(
+              'HTTP {code}（重定向但无 Location）',
+              {'code': code},
+            ),
+            uri: target,
+          );
         }
         target = target.resolve(loc);
         continue;
@@ -199,19 +206,22 @@ class RemoteClient {
       }
       return parseWebdavEntries(utf8.decode(bytes, allowMalformed: true));
     }
-    throw HttpException('重定向次数过多', uri: target);
+    throw HttpException(
+      AppStrings.current.t('重定向次数过多'),
+      uri: target,
+    );
   }
 
   static String _hint(int code) {
     switch (code) {
       case 401:
-        return '（需要登录，请关闭“匿名登录”并填写账号密码）';
+        return '（${AppStrings.current.t('需要登录，请关闭“匿名登录”并填写账号密码')}）';
       case 403:
-        return '（无权限，账号可能不允许该目录）';
+        return '（${AppStrings.current.t('无权限，账号可能不允许该目录')}）';
       case 404:
-        return '（路径不存在，注意大小写并确认 WebDAV 根目录）';
+        return '（${AppStrings.current.t('路径不存在，注意大小写并确认 WebDAV 根目录')}）';
       case 405:
-        return '（该地址不是 WebDAV 服务，或不允许 PROPFIND）';
+        return '（${AppStrings.current.t('该地址不是 WebDAV 服务，或不允许 PROPFIND')}）';
       default:
         return '';
     }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/snapshot.dart';
 import '../state/app_state.dart';
 import '../utils/format.dart';
@@ -37,15 +38,15 @@ class _SnapshotsScreenState extends State<SnapshotsScreen>
         leading: FloatingNavScope.activeOf(context)
             ? const FloatingNavButton()
             : null,
-        title: const Text(
-          '快照与备份',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        title: Text(
+          context.strings.t('快照与备份'),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         bottom: TabBar(
           controller: _tabs,
-          tabs: const [
-            Tab(text: '快照'),
-            Tab(text: '备份'),
+          tabs: [
+            Tab(text: context.strings.t('快照')),
+            Tab(text: context.strings.t('备份')),
           ],
         ),
       ),
@@ -53,12 +54,12 @@ class _SnapshotsScreenState extends State<SnapshotsScreen>
           ? FloatingActionButton.extended(
               onPressed: () => createSnapshot(context, state),
               icon: const Icon(Icons.camera_alt_outlined),
-              label: const Text('创建快照'),
+              label: Text(context.strings.t('创建快照')),
             )
           : FloatingActionButton.extended(
               onPressed: () => createBackupList(context, state),
               icon: const Icon(Icons.playlist_add),
-              label: const Text('新建备份列表'),
+              label: Text(context.strings.t('新建备份列表')),
             ),
       body: TabBarView(
         controller: _tabs,
@@ -97,11 +98,16 @@ class _SnapshotsTab extends StatelessWidget {
         if (state.apps.isNotEmpty)
           ListTile(
             leading: const CircleAvatar(child: Icon(Icons.today)),
-            title: const Text('当前设备'),
+            title: Text(context.strings.t('当前设备')),
             subtitle: Text(
-              '${state.apps.length} 个应用 · ${Fmt.dateTime(state.lastScanAt?.millisecondsSinceEpoch ?? 0)}',
+              context.strings.t('{n} 个应用 · {date}', {
+                'n': state.apps.length,
+                'date': Fmt.dateTime(
+                  state.lastScanAt?.millisecondsSinceEpoch ?? 0,
+                ),
+              }),
             ),
-            trailing: const Text('实时'),
+            trailing: Text(context.strings.t('实时')),
           ),
         const Divider(height: 1),
         Expanded(
@@ -119,8 +125,8 @@ class _SnapshotsTab extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       subtitle: Text(
-                        '已安装 ${s.installedCount}'
-                        '${s.uninstalledCount > 0 ? ' · 已卸载 ${s.uninstalledCount}' : ''}'
+                        '${context.strings.t('已安装 {n}', {'n': s.installedCount})}'
+                        '${s.uninstalledCount > 0 ? ' · ${context.strings.t('已卸载 {n}', {'n': s.uninstalledCount})}' : ''}'
                         ' · ${Fmt.dateTime(s.createdAt)}'
                         '${s.note.isNotEmpty ? '\n${s.note}' : ''}',
                       ),
@@ -128,18 +134,27 @@ class _SnapshotsTab extends StatelessWidget {
                       trailing: PopupMenuButton<String>(
                         onSelected: (v) =>
                             _onSnapshotAction(context, state, s, v),
-                        itemBuilder: (_) => const [
+                        itemBuilder: (ctx) => [
                           PopupMenuItem(
                             value: 'current',
-                            child: Text('与「当前」对比'),
+                            child: Text(ctx.strings.t('与「当前」对比')),
                           ),
-                          PopupMenuItem(value: 'other', child: Text('与其它快照对比')),
+                          PopupMenuItem(
+                            value: 'other',
+                            child: Text(ctx.strings.t('与其它快照对比')),
+                          ),
                           PopupMenuItem(
                             value: 'restore',
-                            child: Text('恢复标注数据'),
+                            child: Text(ctx.strings.t('恢复标注数据')),
                           ),
-                          PopupMenuItem(value: 'rename', child: Text('重命名')),
-                          PopupMenuItem(value: 'delete', child: Text('删除')),
+                          PopupMenuItem(
+                            value: 'rename',
+                            child: Text(ctx.strings.t('重命名')),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Text(ctx.strings.t('删除')),
+                          ),
                         ],
                       ),
                     );
@@ -152,11 +167,13 @@ class _SnapshotsTab extends StatelessWidget {
 }
 
 Widget _snapshotsEmpty() {
-  return const Center(
+  return Center(
     child: Padding(
-      padding: EdgeInsets.all(32),
+      padding: const EdgeInsets.all(32),
       child: Text(
-        '还没有快照。\n快照会记录当前安装的应用列表，\n方便以后比对新增 / 卸载 / 更新。',
+        AppStrings.current.t(
+          '还没有快照。\n快照会记录当前安装的应用列表，\n方便以后比对新增 / 卸载 / 更新。',
+        ),
         textAlign: TextAlign.center,
       ),
     ),
@@ -165,30 +182,33 @@ Widget _snapshotsEmpty() {
 
 Future<void> createSnapshot(BuildContext context, AppState state) async {
   if (state.apps.isEmpty) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('请先在「应用」页扫描应用列表')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.strings.t('请先在「应用」页扫描应用列表'))),
+    );
     return;
   }
   final controller = TextEditingController();
-  final defaultName = '快照 ${Fmt.day(DateTime.now().millisecondsSinceEpoch)}';
+  final defaultName = context.strings.t('快照 {n}', {
+    'n': Fmt.day(DateTime.now().millisecondsSinceEpoch),
+  });
   controller.text = defaultName;
   final name = await showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('创建快照'),
+      title: Text(ctx.strings.t('创建快照')),
       content: TextField(
         controller: controller,
         autofocus: true,
-        decoration: const InputDecoration(labelText: '快照名称'),
+        decoration: InputDecoration(labelText: ctx.strings.t('快照名称')),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx),
-          child: const Text('取消'),
+          child: Text(ctx.strings.t('取消')),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-          child: const Text('保存'),
+          child: Text(ctx.strings.t('保存')),
         ),
       ],
     ),
@@ -197,7 +217,13 @@ Future<void> createSnapshot(BuildContext context, AppState state) async {
   await state.createSnapshot(name);
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text('已创建快照「${name.isEmpty ? defaultName : name}」')),
+    SnackBar(
+      content: Text(
+        context.strings.t('已创建快照「{name}」', {
+          'name': name.isEmpty ? defaultName : name,
+        }),
+      ),
+    ),
   );
 }
 
@@ -210,14 +236,15 @@ Future<void> _onSnapshotAction(
   switch (action) {
     case 'current':
       if (state.apps.isEmpty) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('请先在「应用」页扫描应用列表')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.strings.t('请先在「应用」页扫描应用列表'))),
+        );
         return;
       }
       _openCompare(
         context,
         olderLabel: '${s.name} (${Fmt.dateTime(s.createdAt)})',
-        newerLabel: '当前设备',
+        newerLabel: context.strings.t('当前设备'),
         older: s.entries,
         newer: _currentEntries(state),
       );
@@ -256,16 +283,16 @@ Future<void> _onSnapshotAction(
       final newName = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('重命名快照'),
+          title: Text(ctx.strings.t('重命名快照')),
           content: TextField(controller: controller, autofocus: true),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
+              child: Text(ctx.strings.t('取消')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-              child: const Text('保存'),
+              child: Text(ctx.strings.t('保存')),
             ),
           ],
         ),
@@ -278,16 +305,16 @@ Future<void> _onSnapshotAction(
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('删除快照'),
-          content: Text('确定删除「${s.name}」吗？'),
+          title: Text(ctx.strings.t('删除快照')),
+          content: Text(ctx.strings.t('确定删除「{name}」吗？', {'name': s.name})),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('取消'),
+              child: Text(ctx.strings.t('取消')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('删除'),
+              child: Text(ctx.strings.t('删除')),
             ),
           ],
         ),
@@ -298,20 +325,20 @@ Future<void> _onSnapshotAction(
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('恢复标注数据'),
+          title: Text(ctx.strings.t('恢复标注数据')),
           content: Text(
-            '将用「${s.name}」中记录的安装原因、备注、分类、收藏及卸载记录'
-            '覆盖当前对应应用的标注数据。\n\n'
-            '此操作只恢复数据，不会安装或卸载任何应用。',
+            '${ctx.strings.t('将用「{name}」中记录的安装原因、备注、分类、收藏及卸载记录', {'name': s.name})}'
+            '${ctx.strings.t('覆盖当前对应应用的标注数据。\n\n')}'
+            '${ctx.strings.t('此操作只恢复数据，不会安装或卸载任何应用。')}',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('取消'),
+              child: Text(ctx.strings.t('取消')),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('恢复'),
+              child: Text(ctx.strings.t('恢复')),
             ),
           ],
         ),
@@ -319,8 +346,13 @@ Future<void> _onSnapshotAction(
       if (ok != true) return;
       final count = await state.restoreSnapshot(s.id);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('已恢复 $count 条应用的标注数据')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.strings.t('已恢复 {count} 条应用的标注数据', {'count': count}),
+          ),
+        ),
+      );
       break;
   }
 }

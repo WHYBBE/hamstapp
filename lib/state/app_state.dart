@@ -1,7 +1,9 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/app_info.dart';
 import '../models/app_meta.dart';
 import '../models/backup_list.dart';
@@ -125,6 +127,8 @@ class AppState extends ChangeNotifier {
     snapshots = await _loadSnapshots();
     backupLists = await _loadBackupLists();
     settings = await _loadSettings();
+    _applyLanguage();
+    _applyLanguage();
     tilePages = await _loadTilePages();
     if (tilePages.isEmpty) {
       tilePages.add(
@@ -575,7 +579,9 @@ class AppState extends ChangeNotifier {
 
     final snapshot = Snapshot(
       id: _newId(),
-      name: name.isEmpty ? '快照 ${snapshots.length + 1}' : name,
+      name: name.isEmpty
+          ? AppStrings.current.t('快照 {n}', {'n': snapshots.length + 1})
+          : name,
       createdAt: now,
       note: note,
       entries: entries,
@@ -693,7 +699,9 @@ class AppState extends ChangeNotifier {
     final now = DateTime.now().millisecondsSinceEpoch;
     final b = BackupList(
       id: _newId(),
-      name: name.isEmpty ? '备份列表 ${backupLists.length + 1}' : name,
+      name: name.isEmpty
+          ? AppStrings.current.t('备份列表 {n}', {'n': backupLists.length + 1})
+          : name,
       description: description,
       createdAt: now,
       updatedAt: now,
@@ -949,7 +957,9 @@ class AppState extends ChangeNotifier {
   Future<TilePage> addTilePage(String name) async {
     final page = TilePage(
       id: _newId(),
-      name: name.isEmpty ? '页面 ${tilePages.length + 1}' : name,
+      name: name.isEmpty
+          ? AppStrings.current.t('页面 {n}', {'n': tilePages.length + 1})
+          : name,
       createdAt: DateTime.now().millisecondsSinceEpoch,
     );
     tilePages.add(page);
@@ -999,7 +1009,11 @@ class AppState extends ChangeNotifier {
 
   TilePage _pageForTile(Tile tile) {
     if (tilePages.isEmpty) {
-      return TilePage(id: '', name: '页面 1', createdAt: 0);
+      return TilePage(
+        id: '',
+        name: AppStrings.current.t('页面 1'),
+        createdAt: 0,
+      );
     }
     return tilePages.firstWhere(
       (p) => p.id == tile.pageId,
@@ -1148,6 +1162,42 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// UI language preference. Defaults to [AppLanguage.system].
+  AppLanguage get language {
+    final raw = settings['language'] as String?;
+    return AppLanguage.values.firstWhere(
+      (l) => l.name == raw,
+      orElse: () => AppLanguage.system,
+    );
+  }
+
+  Future<void> setLanguage(AppLanguage value) async {
+    settings['language'] = value.name;
+    _applyLanguage();
+    await _persistSettings();
+    notifyListeners();
+  }
+
+  /// The concrete language code (`'zh'` / `'en'`) after resolving
+  /// [AppLanguage.system] against the device locale.
+  String get resolvedLanguageCode {
+    switch (language) {
+      case AppLanguage.zh:
+        return 'zh';
+      case AppLanguage.en:
+        return 'en';
+      case AppLanguage.system:
+        final code = ui.PlatformDispatcher.instance.locale.languageCode;
+        return code == 'zh' ? 'zh' : 'en';
+    }
+  }
+
+  ui.Locale get locale => ui.Locale(resolvedLanguageCode);
+
+  void _applyLanguage() {
+    AppStrings.current = AppStrings(resolvedLanguageCode);
+  }
+
   // ---------------------------------------------------------------- sync
 
   /// All configured remote APK sources (FTP / SMB / WebDAV), in tab order.
@@ -1276,12 +1326,13 @@ class AppState extends ChangeNotifier {
     final data = pkg['data'];
     if (data is! Map) return const <String, int>{};
     int len(Object? v) => v is List ? v.length : (v is Map ? v.length : 0);
+    final s = AppStrings.current;
     return <String, int>{
-      '应用': len(data['apps']),
-      '分组': len(data['categories']),
-      '快照': len(data['snapshots']),
-      '备份列表': len(data['backup_lists']),
-      '磁贴': len(data['tiles']),
+      s.t('应用'): len(data['apps']),
+      s.t('分组'): len(data['categories']),
+      s.t('快照'): len(data['snapshots']),
+      s.t('备份列表'): len(data['backup_lists']),
+      s.t('磁贴'): len(data['tiles']),
     };
   }
 
@@ -1291,11 +1342,11 @@ class AppState extends ChangeNotifier {
   /// existing data is touched, so a malformed package cannot partially apply.
   Future<void> importPackage(Map<String, dynamic> pkg) async {
     if (pkg['app'] != 'hamstapp') {
-      throw const FormatException('不是囤囤的数据包');
+      throw FormatException(AppStrings.current.t('不是囤囤的数据包'));
     }
     final data = pkg['data'];
     if (data is! Map) {
-      throw const FormatException('数据包缺少 data 内容');
+      throw FormatException(AppStrings.current.t('数据包缺少 data 内容'));
     }
     final d = data.cast<String, dynamic>();
 
@@ -1353,11 +1404,11 @@ class AppState extends ChangeNotifier {
     backupLists = <BackupList>[];
     tiles = <Tile>[];
     tilePages = [
-      TilePage(
-        id: _newId(),
-        name: '页面 1',
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-      ),
+        TilePage(
+          id: _newId(),
+          name: AppStrings.current.t('页面 1'),
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+        ),
     ];
     apps = <AppInfo>[];
     settings = <String, dynamic>{};
@@ -1557,15 +1608,27 @@ class AppState extends ChangeNotifier {
 
   /// Human readable summary shown as a hint in the app bar (long-press).
   String get appsStatsText {
-    if (scanning) return '正在扫描…';
+    final s = AppStrings.current;
+    if (scanning) return s.t('正在扫描…');
     final last = lastScanAt;
-    if (last == null) return '尚未扫描，点击右上角刷新';
+    if (last == null) return s.t('尚未扫描，点击右上角刷新');
     final ago = Fmt.relative(last.millisecondsSinceEpoch);
     if (filter == AppFilter.uninstalled) {
-      return '卸载记录 ${uninstalledApps.length} 条 · 上次扫描 $ago';
+      return s.t('卸载记录 {n} 条 · 上次扫描 {ago}', {
+        'n': uninstalledApps.length,
+        'ago': ago,
+      });
     }
-    return '共 ${apps.length} 个应用（用户 $userAppCount / 系统 $systemAppCount）'
-        ' · 显示 ${visibleApps.length} · 用时 $lastScanMs ms · $ago';
+    return s.t('共 {n} 个应用（用户 {user} / 系统 {system}）', {
+          'n': apps.length,
+          'user': userAppCount,
+          'system': systemAppCount,
+        }) +
+        s.t(' · 显示 {visible} · 用时 {ms} ms · {ago}', {
+          'visible': visibleApps.length,
+          'ms': lastScanMs,
+          'ago': ago,
+        });
   }
 
   static const _kMeta = 'meta';

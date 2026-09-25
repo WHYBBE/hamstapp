@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_strings.dart';
+
 /// Exposes the "no navigation bar" mode to the top-level screens.
 ///
 /// When [active] is true, each screen shows a fixed menu button as its AppBar
@@ -38,7 +40,7 @@ class FloatingNavButton extends StatelessWidget {
     if (scope == null || !scope.active) return const SizedBox.shrink();
     return IconButton(
       icon: const Icon(Icons.menu),
-      tooltip: '导航',
+      tooltip: context.strings.t('导航'),
       onPressed: scope.onOpen,
     );
   }

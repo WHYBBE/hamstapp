@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../l10n/app_strings.dart';
 import '../state/app_state.dart';
 
 String _two(int n) => n.toString().padLeft(2, '0');
@@ -21,16 +22,24 @@ Future<void> exportData(BuildContext context, AppState state) async {
       fileName: name,
       bytes: Uint8List.fromList(utf8.encode(json)),
       mimeType: 'application/json',
-      dialogTitle: '导出囤囤数据',
+      dialogTitle: AppStrings.current.t('导出囤囤数据'),
     );
     if (uri == null) return;
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(content: Text('已导出数据包')));
+      ..showSnackBar(
+        SnackBar(content: Text(AppStrings.current.t('已导出数据包'))),
+      );
   } catch (e) {
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('导出失败：$e')));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            AppStrings.current.t('导出失败：{error}', {'error': e}),
+          ),
+        ),
+      );
   }
 }
 
@@ -39,7 +48,7 @@ Future<void> importData(BuildContext context, AppState state) async {
   final messenger = ScaffoldMessenger.of(context);
   try {
     final files = await FilePicker.pickFiles(
-      dialogTitle: '选择囤囤数据包',
+      dialogTitle: AppStrings.current.t('选择囤囤数据包'),
       type: FileType.custom,
       allowedExtensions: ['json'],
     );
@@ -47,11 +56,15 @@ Future<void> importData(BuildContext context, AppState state) async {
     final bytes = await files.first.readAsBytes();
     final decoded = jsonDecode(utf8.decode(bytes));
     if (decoded is! Map) {
-      throw const FormatException('文件内容不是有效的数据包');
+      throw FormatException(
+        AppStrings.current.t('文件内容不是有效的数据包'),
+      );
     }
     final pkg = decoded.cast<String, dynamic>();
     if (pkg['app'] != 'hamstapp') {
-      throw const FormatException('这不是囤囤导出的数据包');
+      throw FormatException(
+        AppStrings.current.t('这不是囤囤导出的数据包'),
+      );
     }
     final counts = state.packageCounts(pkg);
     final summary =
@@ -60,18 +73,23 @@ Future<void> importData(BuildContext context, AppState state) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('导入数据'),
+        title: Text(AppStrings.current.t('导入数据')),
         content: Text(
-          '导入会先清空当前全部数据，再写入数据包内容，不会进行部分导入。\n\n'
-          '数据包内容：$summary\n\n确定继续吗？',
+          AppStrings.current.t(
+                '导入会先清空当前全部数据，再写入数据包内容，不会进行部分导入。\n\n',
+              ) +
+              AppStrings.current.t(
+                '数据包内容：{summary}\n\n确定继续吗？',
+                {'summary': summary},
+              ),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('取消')),
+              child: Text(AppStrings.current.t('取消'))),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('清空并导入')),
+              child: Text(AppStrings.current.t('清空并导入'))),
         ],
       ),
     );
@@ -79,11 +97,22 @@ Future<void> importData(BuildContext context, AppState state) async {
     await state.importPackage(pkg);
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(content: Text('导入完成')));
+      ..showSnackBar(
+        SnackBar(content: Text(AppStrings.current.t('导入完成'))),
+      );
   } catch (e) {
     messenger
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('导入失败：$e（本地数据未改动）')));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            AppStrings.current.t(
+              '导入失败：{error}（本地数据未改动）',
+              {'error': e},
+            ),
+          ),
+        ),
+      );
   }
 }
 
@@ -94,17 +123,18 @@ Future<void> clearData(BuildContext context, AppState state) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('清空数据'),
-      content: const Text(
-          '将删除全部应用记录、分组、快照、备份列表、磁贴与设置，且无法恢复。确定吗？'),
+      title: Text(AppStrings.current.t('清空数据')),
+      content: Text(
+        AppStrings.current.t('将删除全部应用记录、分组、快照、备份列表、磁贴与设置，且无法恢复。确定吗？'),
+      ),
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消')),
+            child: Text(AppStrings.current.t('取消'))),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: scheme.error),
           onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('清空'),
+          child: Text(AppStrings.current.t('清空')),
         ),
       ],
     ),
@@ -113,5 +143,5 @@ Future<void> clearData(BuildContext context, AppState state) async {
   await state.clearAllData();
   messenger
     ..hideCurrentSnackBar()
-    ..showSnackBar(const SnackBar(content: Text('已清空数据')));
+    ..showSnackBar(SnackBar(content: Text(AppStrings.current.t('已清空数据'))));
 }

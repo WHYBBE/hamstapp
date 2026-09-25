@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../state/app_state.dart';
 
 /// Opens the appearance color picker: quick preset swatches plus a custom
@@ -29,8 +30,9 @@ class _ThemeColorDialogState extends State<_ThemeColorDialog> {
   @override
   Widget build(BuildContext context) {
     final state = context.read<AppState>();
+    final s = context.strings;
     return AlertDialog(
-      title: const Text('主题色'),
+      title: Text(s.t('主题色')),
       content: SingleChildScrollView(
         child: SizedBox(
           width: 320,
@@ -38,7 +40,7 @@ class _ThemeColorDialogState extends State<_ThemeColorDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const _Label('预设'),
+              _Label(s.t('预设')),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 12,
@@ -55,7 +57,7 @@ class _ThemeColorDialogState extends State<_ThemeColorDialog> {
                 ],
               ),
               const SizedBox(height: 20),
-              const _Label('自定义'),
+              _Label(s.t('自定义')),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -81,7 +83,7 @@ class _ThemeColorDialogState extends State<_ThemeColorDialog> {
                 ],
               ),
               _ChannelSlider(
-                label: '色相',
+                label: s.t('色相'),
                 value: _hsv.hue,
                 max: 360,
                 colors: const [
@@ -96,7 +98,7 @@ class _ThemeColorDialogState extends State<_ThemeColorDialog> {
                 onChanged: (v) => setState(() => _hsv = _hsv.withHue(v)),
               ),
               _ChannelSlider(
-                label: '饱和度',
+                label: s.t('饱和度'),
                 value: _hsv.saturation,
                 max: 1,
                 colors: [
@@ -106,7 +108,7 @@ class _ThemeColorDialogState extends State<_ThemeColorDialog> {
                 onChanged: (v) => setState(() => _hsv = _hsv.withSaturation(v)),
               ),
               _ChannelSlider(
-                label: '明度',
+                label: s.t('明度'),
                 value: _hsv.value,
                 max: 1,
                 colors: [
@@ -122,14 +124,14 @@ class _ThemeColorDialogState extends State<_ThemeColorDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(s.t('取消')),
         ),
         FilledButton(
           onPressed: () async {
             await state.setThemeColor(_color.toARGB32());
             if (context.mounted) Navigator.pop(context);
           },
-          child: const Text('确定'),
+          child: Text(s.t('确定')),
         ),
       ],
     );

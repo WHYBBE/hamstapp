@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/category.dart';
 import '../state/app_state.dart';
 
@@ -41,12 +42,13 @@ Future<void> showCategoryEditor(
   );
   var color = existing?.colorValue ?? kCategoryPalette.first;
   var emoji = existing?.emoji ?? kCategoryEmojiChoices.first;
+  final s = context.strings;
 
   await showDialog(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setLocal) => AlertDialog(
-        title: Text(existing == null ? '新建分类' : '编辑分类'),
+        title: Text(existing == null ? s.t('新建分类') : s.t('编辑分类')),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -55,13 +57,13 @@ Future<void> showCategoryEditor(
               TextField(
                 controller: nameController,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: '名称',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: s.t('名称'),
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 16),
-              const Text('颜色'),
+              Text(s.t('颜色')),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -84,7 +86,7 @@ Future<void> showCategoryEditor(
                 }).toList(),
               ),
               const SizedBox(height: 16),
-              const Text('图标'),
+              Text(s.t('图标')),
               const SizedBox(height: 8),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -103,11 +105,11 @@ Future<void> showCategoryEditor(
                   Expanded(
                     child: TextField(
                       controller: emojiController,
-                      decoration: const InputDecoration(
-                        labelText: '自定义 Emoji',
-                        hintText: '粘贴或输入一个 Emoji',
+                      decoration: InputDecoration(
+                        labelText: s.t('自定义 Emoji'),
+                        hintText: s.t('粘贴或输入一个 Emoji'),
                         isDense: true,
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
                       ),
                       onChanged: (v) {
                         final chars = v.trim().characters;
@@ -148,7 +150,7 @@ Future<void> showCategoryEditor(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(s.t('取消')),
           ),
           FilledButton(
             onPressed: () async {
@@ -166,7 +168,7 @@ Future<void> showCategoryEditor(
               }
               if (ctx.mounted) Navigator.pop(ctx);
             },
-            child: const Text('保存'),
+            child: Text(s.t('保存')),
           ),
         ],
       ),
@@ -179,19 +181,20 @@ Future<void> confirmDeleteCategory(
   AppState state,
   AppCategory c,
 ) async {
+  final s = context.strings;
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('删除分类'),
-      content: Text('删除「${c.name}」后，应用上的该分类也会移除。'),
+      title: Text(s.t('删除分类')),
+      content: Text(s.t('删除「{name}」后，应用上的该分类也会移除。', {'name': c.name})),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('取消'),
+          child: Text(s.t('取消')),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('删除'),
+          child: Text(s.t('删除')),
         ),
       ],
     ),

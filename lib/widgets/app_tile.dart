@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/app_info.dart';
 import '../models/category.dart';
 import '../state/app_state.dart';
@@ -32,7 +33,7 @@ class AppListTile extends StatelessWidget {
 
     final subtitleParts = <String>[
       if (app.versionName.isNotEmpty) 'v${app.versionName}',
-      if (app.isSystem) '系统',
+      if (app.isSystem) context.strings.t('系统'),
     ];
 
     return ListTile(
@@ -99,7 +100,9 @@ class AppListTile extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          tooltip: meta.favorite ? '取消收藏' : '收藏',
+          tooltip: meta.favorite
+              ? context.strings.t('取消收藏')
+              : context.strings.t('收藏'),
           icon: Icon(
             meta.favorite ? Icons.star_rounded : Icons.star_border_rounded,
             color: meta.favorite ? Colors.amber : Colors.grey,
@@ -107,7 +110,7 @@ class AppListTile extends StatelessWidget {
           onPressed: () => state.updateMeta(app.packageName, favorite: !meta.favorite),
         ),
         IconButton(
-          tooltip: '启动',
+          tooltip: context.strings.t('启动'),
           icon: const Icon(Icons.rocket_launch_outlined, size: 20),
           onPressed: () => launchApp(context, app.packageName),
         ),
@@ -149,5 +152,7 @@ class CategoryChip extends StatelessWidget {
   }
 }
 
-String installedSummary(AppInfo app) =>
-    '安装于 ${Fmt.day(app.firstInstallTime)} · 更新于 ${Fmt.relative(app.lastUpdateTime)}';
+String installedSummary(AppInfo app) => AppStrings.current.t(
+  '安装于 {date} · 更新于 {ago}',
+  {'date': Fmt.day(app.firstInstallTime), 'ago': Fmt.relative(app.lastUpdateTime)},
+);

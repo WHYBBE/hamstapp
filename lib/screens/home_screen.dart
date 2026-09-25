@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../state/app_state.dart';
 import '../widgets/floating_nav.dart';
 import '../widgets/uninstall_reason.dart';
@@ -21,19 +22,12 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _uninstallSheetVisible = false;
   bool _navOpen = false;
 
-  static const List<_NavItem> _destinations = [
-    _NavItem(Icons.rocket_launch_outlined, Icons.rocket_launch, '启动'),
-    _NavItem(Icons.apps_outlined, Icons.apps, '应用'),
-    _NavItem(Icons.compare_arrows_outlined, Icons.compare_arrows, '快照'),
-    _NavItem(Icons.settings_outlined, Icons.settings, '设置'),
-  ];
-
   void _select(AppState state, int i) {
     if (state.tileEditMode) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          const SnackBar(content: Text('请先点击右上角「完成」结束磁贴编辑')),
+          SnackBar(content: Text(context.strings.t('请先点击右上角「完成」结束磁贴编辑'))),
         );
       return;
     }
@@ -43,6 +37,14 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    final s = context.strings;
+
+    final destinations = [
+      _NavItem(Icons.rocket_launch_outlined, Icons.rocket_launch, s.t('启动')),
+      _NavItem(Icons.apps_outlined, Icons.apps, s.t('应用')),
+      _NavItem(Icons.compare_arrows_outlined, Icons.compare_arrows, s.t('快照')),
+      _NavItem(Icons.settings_outlined, Icons.settings, s.t('设置')),
+    ];
 
     // First launch: nothing scanned yet -> kick off a scan automatically.
     if (state.initialized && state.apps.isEmpty && !state.scanning) {
@@ -93,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onDestinationSelected: (i) => _select(state, i),
                 labelType: NavigationRailLabelType.all,
                 destinations: [
-                  for (final d in _destinations)
+                  for (final d in destinations)
                     NavigationRailDestination(
                       icon: Icon(d.icon),
                       selectedIcon: Icon(d.selectedIcon),
@@ -114,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
               if (_navOpen)
                 _FloatingNavOverlay(
                   index: _index,
-                  destinations: _destinations,
+                  destinations: destinations,
                   onDismiss: () => setState(() => _navOpen = false),
                   onSelect: (i) {
                     setState(() => _navOpen = false);
@@ -132,7 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
             selectedIndex: _index,
             onDestinationSelected: (i) => _select(state, i),
             destinations: [
-              for (final d in _destinations)
+              for (final d in destinations)
                 NavigationDestination(
                   icon: Icon(d.icon),
                   selectedIcon: Icon(d.selectedIcon),

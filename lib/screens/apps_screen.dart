@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../state/app_state.dart';
 import '../widgets/app_tile.dart';
 import '../widgets/floating_nav.dart';
@@ -23,10 +24,13 @@ class AppsScreen extends StatelessWidget {
         leading: FloatingNavScope.activeOf(context)
             ? const FloatingNavButton()
             : null,
-        title: const Text('应用', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          context.strings.t('应用'),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
-            tooltip: '同步远程 APK',
+            tooltip: context.strings.t('同步远程 APK'),
             icon: const Icon(Icons.cloud_sync_outlined),
             onPressed: () => Navigator.push(
               context,
@@ -60,7 +64,7 @@ class AppsScreen extends StatelessWidget {
                   ),
                 )
               : IconButton(
-                  tooltip: '刷新应用列表',
+                  tooltip: context.strings.t('刷新应用列表'),
                   icon: const Icon(Icons.refresh),
                   onPressed: state.scan,
                 ),
@@ -119,11 +123,11 @@ class _UninstalledList extends StatelessWidget {
     if (items.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
-          SizedBox(height: 120),
-          Icon(Icons.history_toggle_off, size: 64, color: Colors.grey),
-          SizedBox(height: 12),
-          Center(child: Text('还没有卸载记录')),
+        children: [
+          const SizedBox(height: 120),
+          const Icon(Icons.history_toggle_off, size: 64, color: Colors.grey),
+          const SizedBox(height: 12),
+          Center(child: Text(context.strings.t('还没有卸载记录'))),
         ],
       );
     }
@@ -176,7 +180,7 @@ class _SearchBarState extends State<_SearchBar> {
                 widget.state.refresh();
               },
               decoration: InputDecoration(
-                hintText: '搜索应用名 / 包名 / 拼音首字母',
+                hintText: context.strings.t('搜索应用名 / 包名 / 拼音首字母'),
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _controller.text.isEmpty
                     ? null
@@ -211,19 +215,20 @@ class _SortMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.strings;
     return PopupMenuButton<AppSort>(
       icon: const Icon(Icons.sort),
-      tooltip: '排序',
+      tooltip: s.t('排序'),
       initialValue: state.sort,
       onSelected: (v) {
         state.sort = v;
         state.refresh();
       },
-      itemBuilder: (context) => const [
-        PopupMenuItem(value: AppSort.name, child: Text('按名称')),
-        PopupMenuItem(value: AppSort.installTime, child: Text('按安装时间')),
-        PopupMenuItem(value: AppSort.updateTime, child: Text('按更新时间')),
-        PopupMenuItem(value: AppSort.size, child: Text('按大小')),
+      itemBuilder: (context) => [
+        PopupMenuItem(value: AppSort.name, child: Text(s.t('按名称'))),
+        PopupMenuItem(value: AppSort.installTime, child: Text(s.t('按安装时间'))),
+        PopupMenuItem(value: AppSort.updateTime, child: Text(s.t('按更新时间'))),
+        PopupMenuItem(value: AppSort.size, child: Text(s.t('按大小'))),
       ],
     );
   }
@@ -233,18 +238,18 @@ class _FilterRow extends StatelessWidget {
   const _FilterRow({required this.state});
   final AppState state;
 
-  static const _labels = {
-    AppFilter.all: '全部',
-    AppFilter.favorite: '⭐收藏',
-    AppFilter.categorized: '已分类',
-    AppFilter.uncategorized: '未分类',
-    AppFilter.hasReason: '有原因',
-    AppFilter.unorganized: '🫥未整理',
-    AppFilter.uninstalled: '🗑️已卸载',
-  };
-
   @override
   Widget build(BuildContext context) {
+    final s = context.strings;
+    final labels = {
+      AppFilter.all: s.t('全部'),
+      AppFilter.favorite: '⭐${s.t('收藏')}',
+      AppFilter.categorized: s.t('已分类'),
+      AppFilter.uncategorized: s.t('未分类'),
+      AppFilter.hasReason: s.t('有原因'),
+      AppFilter.unorganized: '🫥${s.t('未整理')}',
+      AppFilter.uninstalled: '🗑️${s.t('已卸载')}',
+    };
     return SizedBox(
       height: 44,
       child: Row(
@@ -257,12 +262,12 @@ class _FilterRow extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 4),
               children: [
-                ..._labels.entries.map(
+                ...labels.entries.map(
                   (e) => Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: Tooltip(
                       message: e.key == AppFilter.unorganized
-                          ? '未分组、无原因/备注，且未收藏、未固定到磁贴'
+                          ? s.t('未分组、无原因/备注，且未收藏、未固定到磁贴')
                           : '',
                       child: FilterChip(
                         label: Text(e.value),
@@ -310,27 +315,28 @@ class _ScopeDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final s = context.strings;
     final (label, icon) = switch (state.scope) {
-      AppScope.all => ('全部', Icons.apps),
-      AppScope.user => ('用户', Icons.person_outline),
-      AppScope.system => ('系统', Icons.settings_outlined),
+      AppScope.all => (s.t('全部'), Icons.apps),
+      AppScope.user => (s.t('用户'), Icons.person_outline),
+      AppScope.system => (s.t('系统'), Icons.settings_outlined),
     };
     final active = state.scope != AppScope.all;
     return PopupMenuButton<AppScope>(
-      tooltip: '应用类型',
+      tooltip: s.t('应用类型'),
       initialValue: state.scope,
       onSelected: (v) {
         state.scope = v;
         state.refresh();
       },
-      itemBuilder: (_) => const [
+      itemBuilder: (_) => [
         PopupMenuItem(
           value: AppScope.all,
           child: ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.apps),
-            title: Text('全部'),
+            leading: const Icon(Icons.apps),
+            title: Text(s.t('全部')),
           ),
         ),
         PopupMenuItem(
@@ -338,8 +344,8 @@ class _ScopeDropdown extends StatelessWidget {
           child: ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.person_outline),
-            title: Text('用户'),
+            leading: const Icon(Icons.person_outline),
+            title: Text(s.t('用户')),
           ),
         ),
         PopupMenuItem(
@@ -347,8 +353,8 @@ class _ScopeDropdown extends StatelessWidget {
           child: ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.settings_outlined),
-            title: Text('系统'),
+            leading: const Icon(Icons.settings_outlined),
+            title: Text(s.t('系统')),
           ),
         ),
       ],
@@ -409,10 +415,12 @@ class _EmptyView extends StatelessWidget {
         Center(
           child: Text(
             state.scanError != null
-                ? '扫描失败：${state.scanError}'
+                ? context.strings.t('扫描失败：{error}', {
+                    'error': state.scanError,
+                  })
                 : state.scanning
-                ? '正在扫描已安装应用…'
-                : '没有匹配的应用',
+                ? context.strings.t('正在扫描已安装应用…')
+                : context.strings.t('没有匹配的应用'),
             style: TextStyle(color: Colors.grey.shade600),
           ),
         ),

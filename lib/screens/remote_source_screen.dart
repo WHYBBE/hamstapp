@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/remote_source.dart';
 import '../services/remote_client.dart';
 import '../state/app_state.dart';
@@ -103,8 +104,9 @@ class _SyncSourceEditScreenState extends State<SyncSourceEditScreen> {
 
   Future<void> _save() async {
     final cfg = _build();
+    final s = context.strings;
     if (cfg.host.trim().isEmpty || cfg.path.trim().isEmpty) {
-      _snack('请至少填写主机和路径');
+      _snack(s.t('请至少填写主机和路径'));
       return;
     }
     final state = context.read<AppState>();
@@ -119,17 +121,24 @@ class _SyncSourceEditScreenState extends State<SyncSourceEditScreen> {
 
   Future<void> _test() async {
     final cfg = _build();
+    final s = context.strings;
     if (!cfg.configured) {
-      _snack('请先填写主机和路径');
+      _snack(s.t('请先填写主机和路径'));
       return;
     }
     setState(() => _busy = true);
     try {
       final r = await RemoteClient.test(cfg);
       final ok = r['ok'] == true;
-      _snack(ok ? '连接成功，发现 ${r['count']} 个 APK' : '连接失败：${r['error'] ?? '未知错误'}');
+      _snack(
+        ok
+            ? s.t('连接成功，发现 {n} 个 APK', {'n': r['count']})
+            : s.t('连接失败：{error}', {
+                'error': r['error'] ?? s.t('未知错误'),
+              }),
+      );
     } catch (e) {
-      _snack('连接失败：$e');
+      _snack(s.t('连接失败：{error}', {'error': e}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -137,17 +146,18 @@ class _SyncSourceEditScreenState extends State<SyncSourceEditScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.strings;
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isNew ? '新建同步源' : '编辑同步源',
+        title: Text(_isNew ? s.t('新建同步源') : s.t('编辑同步源'),
             style: const TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           TextButton(
             onPressed: _busy ? null : _test,
-            child: const Text('测试连接'),
+            child: Text(s.t('测试连接')),
           ),
           IconButton(
-            tooltip: '保存',
+            tooltip: s.t('保存'),
             icon: const Icon(Icons.check),
             onPressed: _busy ? null : _save,
           ),
@@ -164,11 +174,11 @@ class _SyncSourceEditScreenState extends State<SyncSourceEditScreen> {
         children: [
           TextField(
             controller: _name,
-            decoration: const InputDecoration(
-              labelText: '名称',
-              hintText: '例如 NAS / 路由器共享',
-              helperText: '显示在同步界面的标签页上，留空则用协议名',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: s.t('名称'),
+              hintText: s.t('例如 NAS / 路由器共享'),
+              helperText: s.t('显示在同步界面的标签页上，留空则用协议名'),
+              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 16),
@@ -184,10 +194,10 @@ class _SyncSourceEditScreenState extends State<SyncSourceEditScreen> {
           const SizedBox(height: 16),
           TextField(
             controller: _host,
-            decoration: const InputDecoration(
-              labelText: '主机',
-              hintText: '192.168.1.10 或 nas.local',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: s.t('主机'),
+              hintText: '192.168.1.10 / nas.local',
+              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 12),
@@ -195,9 +205,11 @@ class _SyncSourceEditScreenState extends State<SyncSourceEditScreen> {
             controller: _port,
             keyboardType: TextInputType.number,
             decoration: InputDecoration(
-              labelText: '端口',
-              helperText:
-                  '默认 ${RemoteSource.defaultPort(_protocol, secure: _secure)}',
+              labelText: s.t('端口'),
+              helperText: s.t('默认 {port}', {
+                'port':
+                    RemoteSource.defaultPort(_protocol, secure: _secure),
+              }),
               border: const OutlineInputBorder(),
             ),
           ),
@@ -205,9 +217,9 @@ class _SyncSourceEditScreenState extends State<SyncSourceEditScreen> {
           TextField(
             controller: _path,
             decoration: InputDecoration(
-              labelText: _protocol == 'smb' ? '共享路径' : '远程目录',
+              labelText: _protocol == 'smb' ? s.t('共享路径') : s.t('远程目录'),
               hintText: _protocol == 'smb' ? 'share/apks' : '/apks',
-              helperText: '支持多层目录，会自动递归查找其中的 APK',
+              helperText: s.t('支持多层目录，会自动递归查找其中的 APK'),
               border: const OutlineInputBorder(),
             ),
           ),
@@ -216,43 +228,43 @@ class _SyncSourceEditScreenState extends State<SyncSourceEditScreen> {
               contentPadding: EdgeInsets.zero,
               value: _secure,
               onChanged: _onSecureChanged,
-              title: const Text('使用 HTTPS'),
+              title: Text(s.t('使用 HTTPS')),
               subtitle: const Text('WebDAV over TLS'),
             ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _anonymous,
             onChanged: (v) => setState(() => _anonymous = v),
-            title: const Text('匿名登录'),
-            subtitle: const Text('FTP anonymous / SMB 来宾 / WebDAV 无鉴权'),
+            title: Text(s.t('匿名登录')),
+            subtitle: Text(s.t('FTP anonymous / SMB 来宾 / WebDAV 无鉴权')),
           ),
           if (!_anonymous) ...[
             TextField(
               controller: _username,
-              decoration: const InputDecoration(
-                labelText: '用户名',
-                helperText: 'SMB 可用 域\\用户名（如 WORKGROUP\\why）',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: s.t('用户名'),
+                helperText: s.t('SMB 可用 域\\用户名（如 WORKGROUP\\why）'),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _password,
               obscureText: true,
-              decoration: const InputDecoration(
-                labelText: '密码',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: s.t('密码'),
+                border: const OutlineInputBorder(),
               ),
             ),
             if (_protocol == 'smb') ...[
               const SizedBox(height: 12),
               TextField(
                 controller: _domain,
-                decoration: const InputDecoration(
-                  labelText: '域 / 工作组（可选）',
+                decoration: InputDecoration(
+                  labelText: s.t('域 / 工作组（可选）'),
                   hintText: 'WORKGROUP',
-                  helperText: 'Windows 本地账户或域常需填写，Samba 一般留空',
-                  border: OutlineInputBorder(),
+                  helperText: s.t('Windows 本地账户或域常需填写，Samba 一般留空'),
+                  border: const OutlineInputBorder(),
                 ),
               ),
             ],
@@ -261,7 +273,7 @@ class _SyncSourceEditScreenState extends State<SyncSourceEditScreen> {
           FilledButton.icon(
             onPressed: _busy ? null : _save,
             icon: const Icon(Icons.save_outlined),
-            label: const Text('保存'),
+            label: Text(s.t('保存')),
           ),
         ],
       ),

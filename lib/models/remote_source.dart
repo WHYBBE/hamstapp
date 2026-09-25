@@ -1,3 +1,5 @@
+import '../l10n/app_strings.dart';
+
 /// Configuration of a remote APK source (FTP, SMB/Samba or WebDAV).
 class RemoteSource {
   /// Stable id so a source can be edited/removed independently.
@@ -95,8 +97,9 @@ class RemoteSource {
       name.trim().isNotEmpty ? name.trim() : protocolLabel;
 
   String get summary {
-    if (!configured) return '未配置';
-    final auth = anonymous ? '匿名' : username;
+    final s = AppStrings.current;
+    if (!configured) return s.t('未配置');
+    final auth = anonymous ? s.t('匿名') : username;
     return '$protocolLabel · $host:$port/$path · $auth';
   }
 

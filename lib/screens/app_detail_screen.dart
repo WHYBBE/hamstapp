@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/app_info.dart';
 import '../models/category.dart';
 import '../state/app_state.dart';
@@ -45,7 +46,7 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
 
   String _currentPageName(AppState state) {
     final pages = state.tilePages;
-    if (pages.isEmpty) return '无磁贴页';
+    if (pages.isEmpty) return AppStrings.current.t('无磁贴页');
     final i = state.currentTilePageIndex.clamp(0, pages.length - 1);
     return pages[i].name;
   }
@@ -72,13 +73,13 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
         actions: [
           if (app != null)
             IconButton(
-              tooltip: '应用信息',
+              tooltip: context.strings.t('应用信息'),
               icon: const Icon(Icons.info_outline),
               onPressed: () => openAppInfo(context, widget.packageName),
             ),
           if (app != null && !app.isSystem)
             IconButton(
-              tooltip: '卸载',
+              tooltip: context.strings.t('卸载'),
               icon: const Icon(Icons.delete_outline),
               onPressed: () => uninstallApp(context, widget.packageName, name),
             ),
@@ -96,7 +97,7 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
                   child: FilledButton.icon(
                     onPressed: () => launchApp(context, widget.packageName),
                     icon: const Icon(Icons.rocket_launch),
-                    label: const Text('启动'),
+                    label: Text(context.strings.t('启动')),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -107,17 +108,22 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
                     icon: Icon(meta.favorite
                         ? Icons.star_rounded
                         : Icons.star_border_rounded),
-                    label: Text(meta.favorite ? '已收藏' : '收藏'),
+                    label: Text(meta.favorite
+                        ? context.strings.t('已收藏')
+                        : context.strings.t('收藏')),
                   ),
                 ),
               ],
             ),
           const SizedBox(height: 8),
-          _SectionTitle('固定到磁贴'),
+          _SectionTitle(context.strings.t('固定到磁贴')),
           if (pinLocations.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: 4, bottom: 8),
-              child: Text('尚未固定到任何磁贴页', style: TextStyle(fontSize: 13)),
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 8),
+              child: Text(
+                context.strings.t('尚未固定到任何磁贴页'),
+                style: const TextStyle(fontSize: 13),
+              ),
             )
           else
             Padding(
@@ -145,20 +151,30 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
                 ? state.addTile(widget.packageName,
                     pageId: state.currentTilePageId)
                 : state.removeTilesOnCurrentPage(widget.packageName),
-            title: Text('固定到当前页「${_currentPageName(state)}」'),
+            title: Text(
+              context.strings.t('固定到当前页「{page}」', {
+                'page': _currentPageName(state),
+              }),
+            ),
             subtitle: currentPinCount > 1
-                ? Text('当前页已有 $currentPinCount 份（可多份）')
-                : const Text('在当前磁贴页显示'),
+                ? Text(
+                    context.strings.t('当前页已有 {n} 份（可多份）', {
+                      'n': currentPinCount,
+                    }),
+                  )
+                : Text(context.strings.t('在当前磁贴页显示')),
           ),
           const SizedBox(height: 12),
-          _SectionTitle('安装原因'),
+          _SectionTitle(context.strings.t('安装原因')),
           TextField(
             controller: _reason,
             maxLines: 3,
             minLines: 2,
-            decoration: const InputDecoration(
-              hintText: '为什么安装它？例如：薅羊毛、工作需要、朋友推荐…',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              hintText: context.strings.t(
+                '为什么安装它？例如：薅羊毛、工作需要、朋友推荐…',
+              ),
+              border: const OutlineInputBorder(),
             ),
             onChanged: (v) {
               state.metaFor(widget.packageName).reason = v;
@@ -166,14 +182,14 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
             },
           ),
           const SizedBox(height: 20),
-          _SectionTitle('备注'),
+          _SectionTitle(context.strings.t('备注')),
           TextField(
             controller: _note,
             maxLines: 3,
             minLines: 2,
-            decoration: const InputDecoration(
-              hintText: '其它想记录的信息',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              hintText: context.strings.t('其它想记录的信息'),
+              border: const OutlineInputBorder(),
             ),
             onChanged: (v) {
               state.metaFor(widget.packageName).note = v;
@@ -183,12 +199,12 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
           const SizedBox(height: 20),
           Row(
             children: [
-              _SectionTitle('分类'),
+              _SectionTitle(context.strings.t('分类')),
               const Spacer(),
               TextButton.icon(
                 onPressed: () => _createCategory(context, state),
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('新建分类'),
+                label: Text(context.strings.t('新建分类')),
               ),
             ],
           ),
@@ -213,7 +229,7 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
             }).toList(),
           ),
           if (state.categories.isEmpty)
-            Text('还没有分类，点击「新建分类」创建一个吧',
+            Text(context.strings.t('还没有分类，点击「新建分类」创建一个吧'),
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
           const SizedBox(height: 24),
           if (app != null) _InfoTable(app: app),
@@ -225,11 +241,13 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
               _reason.clear();
               _note.clear();
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('已清除该应用的自定义信息')),
+                SnackBar(
+                  content: Text(context.strings.t('已清除该应用的自定义信息')),
+                ),
               );
             },
             icon: const Icon(Icons.restart_alt),
-            label: const Text('清除该应用的自定义信息'),
+            label: Text(context.strings.t('清除该应用的自定义信息')),
           ),
           const SizedBox(height: 32),
         ],
@@ -242,19 +260,22 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('新建分类'),
+        title: Text(context.strings.t('新建分类')),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(hintText: '分类名称'),
+          decoration: InputDecoration(
+            hintText: context.strings.t('分类名称'),
+          ),
           onSubmitted: (v) => Navigator.pop(ctx, v),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(context.strings.t('取消'))),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('创建'),
+            child: Text(context.strings.t('创建')),
           ),
         ],
       ),
@@ -303,8 +324,10 @@ class _Header extends StatelessWidget {
                       ),
                     if (app!.isSystem)
                       CategoryChip(
-                        category:
-                            AppCategory(id: '_s', name: '系统应用', emoji: '⚙️'),
+                        category: AppCategory(
+                            id: '_s',
+                            name: context.strings.t('系统应用'),
+                            emoji: '⚙️'),
                       ),
                   ],
                 ),
@@ -337,15 +360,16 @@ class _InfoTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.strings;
     final rows = <(String, String)>[
-      ('安装时间', Fmt.dateTime(app.firstInstallTime)),
-      ('更新时间', Fmt.dateTime(app.lastUpdateTime)),
-      ('大小', Fmt.size(app.sizeBytes)),
-      ('版本号', '${app.versionName} (${app.versionCode})'),
+      (s.t('安装时间'), Fmt.dateTime(app.firstInstallTime)),
+      (s.t('更新时间'), Fmt.dateTime(app.lastUpdateTime)),
+      (s.t('大小'), Fmt.size(app.sizeBytes)),
+      (s.t('版本号'), '${app.versionName} (${app.versionCode})'),
       ('targetSdk', '${app.targetSdk}'),
       ('minSdk', '${app.minSdk}'),
       ('UID', '${app.uid}'),
-      ('APK 路径', app.apkPath),
+      (s.t('APK 路径'), app.apkPath),
     ];
     return Card(
       elevation: 0,

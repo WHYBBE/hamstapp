@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/app_meta.dart';
 import '../state/app_state.dart';
 import '../utils/format.dart';
@@ -25,11 +26,12 @@ Future<void> showUninstallReasonDialog(
 ) async {
   final meta = state.metaFor(packageName);
   final controller = TextEditingController(text: meta.uninstallReason);
+  final s = context.strings;
   final result = await showDialog<String>(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setLocal) => AlertDialog(
-        title: Text('卸载原因 · $appName',
+        title: Text(s.t('卸载原因 · {name}', {'name': appName}),
             maxLines: 1, overflow: TextOverflow.ellipsis),
         content: SingleChildScrollView(
           child: Column(
@@ -41,9 +43,9 @@ Future<void> showUninstallReasonDialog(
                 autofocus: true,
                 maxLines: 3,
                 minLines: 1,
-                decoration: const InputDecoration(
-                  hintText: '为什么卸载它？',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  hintText: s.t('为什么卸载它？'),
+                  border: const OutlineInputBorder(),
                 ),
                 onChanged: (_) => setLocal(() {}),
               ),
@@ -53,9 +55,9 @@ Future<void> showUninstallReasonDialog(
                 runSpacing: 6,
                 children: kUninstallReasonPresets.map((r) {
                   return ActionChip(
-                    label: Text(r, style: const TextStyle(fontSize: 12)),
+                    label: Text(s.t(r), style: const TextStyle(fontSize: 12)),
                     onPressed: () {
-                      controller.text = r;
+                      controller.text = s.t(r);
                       setLocal(() {});
                     },
                   );
@@ -67,15 +69,15 @@ Future<void> showUninstallReasonDialog(
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, ''),
-            child: const Text('清除原因'),
+            child: Text(s.t('清除原因')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(s.t('取消')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('保存'),
+            child: Text(s.t('保存')),
           ),
         ],
       ),
@@ -101,11 +103,12 @@ class UninstallReasonSheet extends StatelessWidget {
   }
 
   Widget _build(BuildContext context, List<AppMeta> items) {
+    final s = context.strings;
     if (items.isEmpty) {
-      return const SafeArea(
+      return SafeArea(
         child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Center(child: Text('已全部处理')),
+          padding: const EdgeInsets.all(32),
+          child: Center(child: Text(s.t('已全部处理'))),
         ),
       );
     }
@@ -130,7 +133,7 @@ class UninstallReasonSheet extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '检测到 ${items.length} 个应用被卸载',
+                    s.t('检测到 {n} 个应用被卸载', {'n': items.length}),
                     style: const TextStyle(
                         fontSize: 17, fontWeight: FontWeight.bold),
                   ),
@@ -143,7 +146,7 @@ class UninstallReasonSheet extends StatelessWidget {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                '对比上次快照后发现以下应用已不在设备上，可以为它们记录卸载原因。',
+                s.t('对比上次快照后发现以下应用已不在设备上，可以为它们记录卸载原因。'),
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
               ),
             ),
@@ -170,8 +173,8 @@ class UninstallReasonSheet extends StatelessWidget {
                   ),
                   subtitle: Text(
                     m.uninstallReason.isEmpty
-                        ? '${m.packageName}\n点击添加卸载原因'
-                        : '原因：${m.uninstallReason}',
+                        ? s.t('{pkg}\n点击添加卸载原因', {'pkg': m.packageName})
+                        : s.t('原因：{reason}', {'reason': m.uninstallReason}),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -208,7 +211,7 @@ class UninstallReasonSheet extends StatelessWidget {
                   state.clearPendingUninstalls();
                   Navigator.pop(context);
                 },
-                child: const Text('完成'),
+                child: Text(s.t('完成')),
               ),
             ),
           ),
@@ -235,7 +238,9 @@ class UninstalledTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '卸载于 ${Fmt.dateTime(meta.uninstalledAt)}',
+            AppStrings.current.t('卸载于 {date}', {
+              'date': Fmt.dateTime(meta.uninstalledAt),
+            }),
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
           if (meta.uninstallReason.isNotEmpty)
