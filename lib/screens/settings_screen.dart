@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/native_apps.dart';
 import '../state/app_state.dart';
 import '../utils/backup_actions.dart';
+import '../widgets/floating_nav.dart';
 import 'sync_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -16,6 +17,9 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
+        leading: FloatingNavScope.activeOf(context)
+            ? const FloatingNavButton()
+            : null,
         title: const Text('设置', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       body: ListView(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
+import '../widgets/floating_nav.dart';
 import '../widgets/uninstall_reason.dart';
 import 'apps_screen.dart';
 import 'quick_launch_screen.dart';
@@ -18,6 +19,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
   bool _uninstallSheetVisible = false;
+  bool _navOpen = false;
 
   static const List<_NavItem> _destinations = [
     _NavItem(Icons.rocket_launch_outlined, Icons.rocket_launch, '启动'),
@@ -68,10 +70,18 @@ class _HomeScreenState extends State<HomeScreen> {
       SnapshotsScreen(),
       SettingsScreen(),
     ];
-    final body = IndexedStack(index: _index, children: screens);
 
     final mq = MediaQuery.of(context);
     final mode = state.resolvedNavMode(mq.size.width, mq.size.height);
+    final floating = mode == NavMode.floating;
+
+    // The scope lets every top-level screen render the fixed top-left button
+    // without knowing about the home layout.
+    final body = FloatingNavScope(
+      active: floating,
+      onOpen: () => setState(() => _navOpen = !_navOpen),
+      child: IndexedStack(index: _index, children: screens),
+    );
 
     switch (mode) {
       case NavMode.rail:
@@ -101,11 +111,16 @@ class _HomeScreenState extends State<HomeScreen> {
           body: Stack(
             children: [
               Positioned.fill(child: body),
-              _FloatingNav(
-                index: _index,
-                destinations: _destinations,
-                onSelect: (i) => _select(state, i),
-              ),
+              if (_navOpen)
+                _FloatingNavOverlay(
+                  index: _index,
+                  destinations: _destinations,
+                  onDismiss: () => setState(() => _navOpen = false),
+                  onSelect: (i) {
+                    setState(() => _navOpen = false);
+                    _select(state, i);
+                  },
+                ),
             ],
           ),
         );
@@ -139,73 +154,47 @@ class _NavItem {
   final String label;
 }
 
-/// Bottom-right floating button that reveals a compact vertical navigation.
-class _FloatingNav extends StatefulWidget {
-  const _FloatingNav({
+/// Panel revealed from the top-left button in floating mode. Anchored below the
+/// AppBar so it never hides the header, and dismisses on any outside tap.
+class _FloatingNavOverlay extends StatelessWidget {
+  const _FloatingNavOverlay({
     required this.index,
     required this.destinations,
     required this.onSelect,
+    required this.onDismiss,
   });
 
   final int index;
   final List<_NavItem> destinations;
   final ValueChanged<int> onSelect;
-
-  @override
-  State<_FloatingNav> createState() => _FloatingNavState();
-}
-
-class _FloatingNavState extends State<_FloatingNav> {
-  bool _open = false;
+  final VoidCallback onDismiss;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Positioned(
-      right: 16,
-      bottom: 24,
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
+    final top = MediaQuery.of(context).padding.top + kToolbarHeight + 8;
+
+    return Positioned.fill(
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: onDismiss,
+        child: Stack(
           children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 160),
-              child: _open
-                  ? Container(
-                      key: const ValueKey('nav-panel'),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      decoration: BoxDecoration(
-                        color: scheme.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.22),
-                            blurRadius: 18,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          for (var i = 0; i < widget.destinations.length; i++)
-                            _item(context, i, scheme),
-                        ],
-                      ),
-                    )
-                  : const SizedBox.shrink(key: ValueKey('nav-closed')),
-            ),
-            FloatingActionButton(
-              onPressed: () => setState(() => _open = !_open),
-              tooltip: _open ? '收起导航' : '导航',
-              backgroundColor: scheme.primaryContainer,
-              foregroundColor: scheme.onPrimaryContainer,
-              child: AnimatedRotation(
-                turns: _open ? 0.125 : 0,
-                duration: const Duration(milliseconds: 160),
-                child: Icon(_open ? Icons.close : Icons.menu),
+            Positioned(
+              left: 12,
+              top: top,
+              child: Material(
+                color: scheme.surfaceContainerHigh,
+                elevation: 8,
+                borderRadius: BorderRadius.circular(18),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < destinations.length; i++)
+                      _item(context, i, scheme),
+                  ],
+                ),
               ),
             ),
           ],
@@ -215,16 +204,12 @@ class _FloatingNavState extends State<_FloatingNav> {
   }
 
   Widget _item(BuildContext context, int i, ColorScheme scheme) {
-    final selected = i == widget.index;
-    final d = widget.destinations[i];
+    final selected = i == index;
+    final d = destinations[i];
     return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () {
-        setState(() => _open = false);
-        widget.onSelect(i);
-      },
+      onTap: () => onSelect(i),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -233,7 +218,7 @@ class _FloatingNavState extends State<_FloatingNav> {
               size: 20,
               color: selected ? scheme.primary : scheme.onSurfaceVariant,
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Text(
               d.label,
               style: TextStyle(

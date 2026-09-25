@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
 import '../widgets/app_tile.dart';
+import '../widgets/floating_nav.dart';
 import '../widgets/uninstall_reason.dart';
 import 'app_detail_screen.dart';
 import 'sync_screen.dart';
@@ -19,6 +20,9 @@ class AppsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
+        leading: FloatingNavScope.activeOf(context)
+            ? const FloatingNavButton()
+            : null,
         title: const Text('应用', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
