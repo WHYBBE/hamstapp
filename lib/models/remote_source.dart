@@ -24,15 +24,16 @@ class RemoteSource {
 
   factory RemoteSource.fromMap(Map<String, dynamic> map) {
     final protocol = map['protocol'] as String? ?? 'ftp';
+    final secure = map['secure'] as bool? ?? false;
     return RemoteSource(
       protocol: protocol,
       host: map['host'] as String? ?? '',
-      port: (map['port'] as num?)?.toInt() ?? defaultPort(protocol),
+      port: (map['port'] as num?)?.toInt() ?? defaultPort(protocol, secure: secure),
       path: map['path'] as String? ?? '',
       username: map['username'] as String? ?? '',
       password: map['password'] as String? ?? '',
       anonymous: map['anonymous'] as bool? ?? true,
-      secure: map['secure'] as bool? ?? false,
+      secure: secure,
     );
   }
 

@@ -326,32 +326,35 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
         if (port != 445) props.setProperty("jcifs.smb.client.port", port.toString())
 
         val base = BaseContext(PropertyConfiguration(props))
-        val ctx: CIFSContext = if (anonymous) {
-            base.withAnonymousCredentials()
-        } else {
-            base.withCredentials(NtlmPasswordAuthenticator("", user, pass))
-        }
-        val portPart = if (port != 445) ":$port" else ""
-        val dir = SmbFile("smb://$host$portPart/$path/", ctx)
-        if (!dir.exists()) {
-            throw IllegalStateException("无法访问共享 $path（$host$portPart），请检查路径与权限")
-        }
-        val children = dir.listFiles() ?: emptyArray<SmbFile>()
-        val out = ArrayList<Map<String, Any?>>()
-        for (f in children) {
-            if (f == null || f.isDirectory) continue
-            val name = f.name ?: continue
-            if (!name.lowercase().endsWith(".apk")) continue
-            out.add(
-                mapOf(
-                    "name" to name,
-                    "size" to f.length(),
-                    "path" to "$path/$name",
-                    "modified" to f.lastModified()
+        try {
+            val ctx: CIFSContext = if (anonymous) {
+                base.withAnonymousCredentials()
+            } else {
+                base.withCredentials(NtlmPasswordAuthenticator("", user, pass))
+            }
+            val portPart = if (port != 445) ":$port" else ""
+            val dir = SmbFile("smb://$host$portPart/$path/", ctx)
+            // listFiles() surfaces the real SmbException (wrong share, denied,
+            // bad credentials, ...), which is more useful than exists()==false.
+            val children = dir.listFiles() ?: emptyArray<SmbFile>()
+            val out = ArrayList<Map<String, Any?>>()
+            for (f in children) {
+                if (f == null || f.isDirectory) continue
+                val name = f.name ?: continue
+                if (!name.lowercase().endsWith(".apk")) continue
+                out.add(
+                    mapOf(
+                        "name" to name,
+                        "size" to f.length(),
+                        "path" to "$path/$name",
+                        "modified" to f.lastModified()
+                    )
                 )
-            )
+            }
+            out.sortBy { it["name"] as String }
+            return out
+        } finally {
+            runCatching { base.close() }
         }
-        out.sortBy { it["name"] as String }
-        return out
     }
 }
