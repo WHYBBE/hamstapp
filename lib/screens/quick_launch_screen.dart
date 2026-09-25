@@ -356,34 +356,43 @@ class _TileBoardState extends State<_TileBoard> {
   int _resizeW = 1;
   int _resizeH = 1;
 
-  // Drag-to-move state with live target-cell highlight.
+  // Drag-to-move state with live target-cell highlight. We track the pointer
+  // position where the drag *started* and the tile's original top-left so the
+  // tile follows the finger by its delta instead of snapping to the pointer
+  // (which caused a visible jump on the first frame of the drag).
   String? _dragId;
   int _dragW = 1;
   int _dragH = 1;
   int _dragCol = 0;
   int _dragRow = 0;
   double _cellW = 60;
+  Offset _dragStart = Offset.zero;
+  Offset _dragStartLocal = Offset.zero;
 
-  void _startDrag(String tileId) {
+  /// Last pointer-down position on a tile, captured by [_Tile]'s Listener.
+  Offset _downGlobal = Offset.zero;
+
+  void _startDrag(String tileId, int col, int row) {
     final t = widget.state.tileById(tileId);
     if (t == null) return;
+    final unit = _cellW + _gap;
     setState(() {
       _dragId = tileId;
       _dragW = t.w;
       _dragH = t.h;
-      _dragCol = t.col < 0 ? 0 : t.col;
-      _dragRow = t.row < 0 ? 0 : t.row;
+      _dragCol = col;
+      _dragRow = row;
+      _dragStart = _downGlobal;
+      _dragStartLocal = Offset(_pad + col * unit, _pad + row * unit);
     });
   }
 
   void _updateDrag(String tileId, Offset globalPosition) {
-    final box = _boardKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null) return;
-    final local = box.globalToLocal(globalPosition);
+    if (_dragId != tileId) return;
     final unit = _cellW + _gap;
-    final col = ((local.dx - _pad) / unit)
-        .round()
-        .clamp(0, kTileCols - _dragW);
+    final local = _dragStartLocal + (globalPosition - _dragStart);
+    final col =
+        ((local.dx - _pad) / unit).round().clamp(0, kTileCols - _dragW);
     final row = ((local.dy - _pad) / unit).round();
     if (row < 0) return;
     if (col != _dragCol || row != _dragRow) {
@@ -486,7 +495,8 @@ class _TileBoardState extends State<_TileBoard> {
                       cellW: cellW,
                       gap: _gap,
                       editable: editable,
-                      onDragStart: () => _startDrag(t.id),
+                      onPointerDown: (pos) => _downGlobal = pos,
+                      onDragStart: () => _startDrag(t.id, p.col, p.row),
                       onDragUpdate: (pos) => _updateDrag(t.id, pos),
                       onDragEnd: () => _endDrag(t.id),
                       onDragCancel: _cancelDrag,
@@ -495,30 +505,41 @@ class _TileBoardState extends State<_TileBoard> {
                 }),
               if (editable)
                 for (final t in pageTiles)
-                  Builder(builder: (context) {
-                    final p = layout.placements[t.id]!;
-                    return Positioned(
-                      left: x(p.col) + w(p.w) - _kHandleSize,
-                      top: y(p.row) + h(p.h) - _kHandleSize,
-                      width: _kHandleSize,
-                      height: _kHandleSize,
-                      child: _ResizeHandle(
-                        state: state,
-                        tileId: t.id,
-                        cellW: cellW,
-                        gap: _gap,
-                        onPreview: (pw, ph) => setState(() {
-                          _resizeId = t.id;
-                          _resizeW = pw;
-                          _resizeH = ph;
-                        }),
-                        onEnd: () {
-                          state.setTileSize(t.id, _resizeW, _resizeH);
-                          setState(() => _resizeId = null);
-                        },
-                      ),
-                    );
-                  }),
+                  // Skip the grip for the tile being dragged so it cannot
+                  // interfere with an in-progress move.
+                  if (_dragId != t.id)
+                    Builder(builder: (context) {
+                      final p = layout.placements[t.id]!;
+                      final tileW = w(p.w);
+                      final tileH = h(p.h);
+                      // Keep the grip a corner-only target: shrink it on small
+                      // tiles so it never covers most of a 1x1 tile (which
+                      // made moving small tiles fight with resizing).
+                      final shortest = tileW < tileH ? tileW : tileH;
+                      final handle = (shortest * 0.5).clamp(28.0, _kHandleSize);
+                      return Positioned(
+                        left: x(p.col) + tileW - handle,
+                        top: y(p.row) + tileH - handle,
+                        width: handle,
+                        height: handle,
+                        child: _ResizeHandle(
+                          state: state,
+                          tileId: t.id,
+                          cellW: cellW,
+                          gap: _gap,
+                          gripSize: handle * 0.55,
+                          onPreview: (pw, ph) => setState(() {
+                            _resizeId = t.id;
+                            _resizeW = pw;
+                            _resizeH = ph;
+                          }),
+                          onEnd: () {
+                            state.setTileSize(t.id, _resizeW, _resizeH);
+                            setState(() => _resizeId = null);
+                          },
+                        ),
+                      );
+                    }),
             ],
           ),
         ),
@@ -541,6 +562,7 @@ class _ResizeHandle extends StatefulWidget {
     required this.tileId,
     required this.cellW,
     required this.gap,
+    required this.gripSize,
     required this.onPreview,
     required this.onEnd,
   });
@@ -549,6 +571,7 @@ class _ResizeHandle extends StatefulWidget {
   final String tileId;
   final double cellW;
   final double gap;
+  final double gripSize;
   final void Function(int w, int h) onPreview;
   final VoidCallback onEnd;
 
@@ -619,9 +642,12 @@ class _ResizeHandleState extends State<_ResizeHandle> {
         alignment: Alignment.bottomRight,
         child: Padding(
           padding: const EdgeInsets.all(4),
-          child: CustomPaint(
-            size: const Size(22, 22),
-            painter: _CornerGripPainter(active: _active),
+          child: SizedBox(
+            width: widget.gripSize,
+            height: widget.gripSize,
+            child: CustomPaint(
+              painter: _CornerGripPainter(active: _active),
+            ),
           ),
         ),
       ),
@@ -924,6 +950,7 @@ class _Tile extends StatelessWidget {
     required this.cellW,
     required this.gap,
     required this.editable,
+    required this.onPointerDown,
     required this.onDragStart,
     required this.onDragUpdate,
     required this.onDragEnd,
@@ -936,6 +963,7 @@ class _Tile extends StatelessWidget {
   final double cellW;
   final double gap;
   final bool editable;
+  final ValueChanged<Offset> onPointerDown;
   final VoidCallback onDragStart;
   final void Function(Offset globalPosition) onDragUpdate;
   final VoidCallback onDragEnd;
@@ -950,20 +978,26 @@ class _Tile extends StatelessWidget {
 
     if (!editable) return content;
 
-    return LongPressDraggable<String>(
-      data: tile.id,
-      delay: const Duration(milliseconds: 180),
-      dragAnchorStrategy: pointerDragAnchorStrategy,
-      feedback: _feedback(width, height, content),
-      childWhenDragging: Opacity(opacity: 0.3, child: content),
-      onDragStarted: () {
-        HapticFeedback.selectionClick();
-        onDragStart();
-      },
-      onDragUpdate: (d) => onDragUpdate(d.globalPosition),
-      onDragEnd: (d) => onDragEnd(),
-      onDraggableCanceled: (v, o) => onDragCancel(),
-      child: content,
+    // Observe the raw pointer-down so the move follows the finger by delta from
+    // where it actually started (childDragAnchorStrategy keeps the feedback
+    // aligned to the tile, so there is no snap/jump on the first frame).
+    return Listener(
+      onPointerDown: (e) => onPointerDown(e.position),
+      child: LongPressDraggable<String>(
+        data: tile.id,
+        delay: const Duration(milliseconds: 180),
+        dragAnchorStrategy: childDragAnchorStrategy,
+        feedback: _feedback(width, height, content),
+        childWhenDragging: Opacity(opacity: 0.3, child: content),
+        onDragStarted: () {
+          HapticFeedback.selectionClick();
+          onDragStart();
+        },
+        onDragUpdate: (d) => onDragUpdate(d.globalPosition),
+        onDragEnd: (d) => onDragEnd(),
+        onDraggableCanceled: (v, o) => onDragCancel(),
+        child: content,
+      ),
     );
   }
 
