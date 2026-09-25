@@ -43,6 +43,21 @@ android {
             proguardFile("proguard-rules.pro")
         }
     }
+
+    packaging {
+        resources {
+            // BouncyCastle ships ~1.2MB of unused resource bundles (PQC Picnic
+            // constant tables, X.509 message catalogs, ...). We only use MD4 /
+            // AES-CMAC, so drop all of them plus JAR metadata.
+            excludes += setOf(
+                "org/bouncycastle/**",
+                "META-INF/**",
+                "DebugProbesKt.bin",
+                "kotlin/*.kotlin_builtins",
+                "kotlin/**/*.kotlin_builtins",
+            )
+        }
+    }
 }
 
 kotlin {
