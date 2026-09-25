@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/category.dart';
 import '../state/app_state.dart';
+import '../utils/actions.dart';
 import '../utils/search.dart';
 import '../widgets/app_icon.dart';
 import '../widgets/category_editor.dart';
@@ -71,20 +72,26 @@ void showCategoryApps(BuildContext context, AppState state, AppCategory c) {
             ? const Center(child: Text('该分类下还没有应用'))
             : ListView.builder(
                 itemCount: apps.length,
-                itemBuilder: (context, i) => ListTile(
-                  leading: AppIcon(
-                      packageName: apps[i].packageName, label: apps[i].appName),
-                  title: Text(apps[i].appName),
-                  subtitle: Text(apps[i].packageName,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          AppDetailScreen(packageName: apps[i].packageName),
+                itemBuilder: (context, i) {
+                  final app = apps[i];
+                  return ListTile(
+                    leading: AppIcon(
+                        packageName: app.packageName, label: app.appName),
+                    title: Text(app.appName),
+                    subtitle: Text(app.packageName,
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    trailing:
+                        const Icon(Icons.rocket_launch_outlined, size: 20),
+                    onTap: () => launchApp(context, app.packageName),
+                    onLongPress: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            AppDetailScreen(packageName: app.packageName),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
       ),
     ),
