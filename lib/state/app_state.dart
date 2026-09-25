@@ -963,6 +963,7 @@ class AppState extends ChangeNotifier {
       createdAt: DateTime.now().millisecondsSinceEpoch,
     );
     tilePages.add(page);
+    currentTilePageIndex = tilePages.length - 1;
     await _persistTilePages();
     notifyListeners();
     return page;
@@ -977,14 +978,22 @@ class AppState extends ChangeNotifier {
 
   Future<void> deleteTilePage(String id) async {
     if (tilePages.length <= 1) return;
-    tilePages.removeWhere((p) => p.id == id);
+    final removed = tilePages.indexWhere((p) => p.id == id);
+    if (removed < 0) return;
+    tilePages.removeAt(removed);
     final firstId = tilePages.first.id;
     for (final t in tiles) {
       if (t.pageId == id) t.pageId = firstId;
     }
+    // Keep the same logical page in view: if an earlier page disappeared the
+    // current index shifts down by one; otherwise clamp to the new range.
+    if (currentTilePageIndex > removed) {
+      currentTilePageIndex--;
+    }
     if (currentTilePageIndex >= tilePages.length) {
       currentTilePageIndex = tilePages.length - 1;
     }
+    if (currentTilePageIndex < 0) currentTilePageIndex = 0;
     await _persistTilePages();
     await _persistTiles();
     notifyListeners();

@@ -272,13 +272,33 @@ class _TilesTab extends StatefulWidget {
 }
 
 class _TilesTabState extends State<_TilesTab> {
-  final PageController _controller = PageController();
+  late final PageController _controller;
   int _index = 0;
+
+  int _clamp(int i) {
+    final n = widget.state.tilePages.length;
+    if (n == 0) return 0;
+    return i < 0 ? 0 : (i >= n ? n - 1 : i);
+  }
 
   @override
   void initState() {
     super.initState();
-    _index = widget.state.currentTilePageIndex;
+    // Rebuild the board on the same page the shared state points at. Without
+    // this the freshly created PageController would start at page 0 while the
+    // bottom bar highlighted a different page (the two got out of sync when
+    // this tab was rebuilt, e.g. after switching the top-level tab).
+    _index = _clamp(widget.state.currentTilePageIndex);
+    widget.state.currentTilePageIndex = _index;
+    _controller = PageController(initialPage: _index);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TilesTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Page structure may have changed (add / delete / reorder) or another
+    // screen moved the current page; keep local index + controller aligned.
+    _syncToState();
   }
 
   @override
@@ -287,9 +307,27 @@ class _TilesTabState extends State<_TilesTab> {
     super.dispose();
   }
 
+  void _syncToState() {
+    final target = _clamp(widget.state.currentTilePageIndex);
+    if (target == _index) return;
+    _index = target;
+    _jumpTo(target);
+  }
+
+  void _jumpTo(int i) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_controller.hasClients) return;
+      if ((_controller.page?.round() ?? 0) != i) _controller.jumpToPage(i);
+    });
+  }
+
   void _setIndex(int i) {
-    setState(() => _index = i);
-    widget.state.setCurrentTilePage(i);
+    i = _clamp(i);
+    final stateChanged = widget.state.currentTilePageIndex != i;
+    final localChanged = _index != i;
+    if (!stateChanged && !localChanged) return;
+    if (localChanged) setState(() => _index = i);
+    if (stateChanged) widget.state.setCurrentTilePage(i);
   }
 
   @override
@@ -325,35 +363,24 @@ class _TilesTabState extends State<_TilesTab> {
           editing: state.tileEditMode,
           onSelect: (i) {
             _setIndex(i);
-            _controller.animateToPage(
-              i,
-              duration: const Duration(milliseconds: 240),
-              curve: Curves.easeOut,
-            );
+            if (_controller.hasClients &&
+                (_controller.page?.round() ?? 0) != i) {
+              _controller.animateToPage(
+                i,
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOut,
+              );
+            }
           },
           onAdd: () async {
             final page = await _promptAddPage(context, state);
-            if (page == null) return;
+            if (page == null || !mounted) return;
             final idx = state.tilePages.indexWhere((p) => p.id == page.id);
             if (idx < 0) return;
             _setIndex(idx);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_controller.hasClients) _controller.jumpToPage(idx);
-            });
+            _jumpTo(idx);
           },
-          onChanged: () {
-            final idx = state.currentTilePageIndex.clamp(
-              0,
-              state.tilePages.isEmpty ? 0 : state.tilePages.length - 1,
-            );
-            setState(() => _index = idx);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (_controller.hasClients &&
-                  (_controller.page?.round() ?? 0) != idx) {
-                _controller.jumpToPage(idx);
-              }
-            });
-          },
+          onChanged: _syncToState,
         ),
       ],
     );
@@ -955,11 +982,11 @@ class _PageBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(
-            child: editing
-                ? Opacity(opacity: 0.45, child: AbsorbPointer(child: chips))
-                : chips,
-          ),
+          // The page bar stays interactive while editing so you can switch,
+          // rename, reorder or delete pages without leaving edit mode. The
+          // board's swipe gesture is disabled during editing, but tapping a
+          // chip still navigates.
+          Expanded(child: chips),
           if (editing)
             IconButton(
               tooltip: context.strings.t('新建磁贴页'),

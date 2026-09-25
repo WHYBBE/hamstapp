@@ -170,6 +170,41 @@ void main() {
     expect(tester.getRect(tile).left, greaterThan(400));
   });
 
+  testWidgets('tiles tab opens on the current page after being rebuilt', (
+    tester,
+  ) async {
+    final state = AppState(_MemStorage())
+      ..initialized = true
+      ..apps = [_ai('com.a', 'A')]
+      ..tilePages = [
+        TilePage(id: 'p1', name: 'P1', createdAt: 0),
+        TilePage(id: 'p2', name: 'P2', createdAt: 0),
+      ]
+      ..tiles = [
+        Tile(
+          id: 't2',
+          packageName: 'com.a',
+          pageId: 'p2',
+          col: 0,
+          row: 0,
+          w: 2,
+          h: 2,
+        ),
+      ]
+      ..currentTilePageIndex = 1;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: state,
+        child: const MaterialApp(home: QuickLaunchScreen()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // The board and the page bar must agree: page 2's tile is the one shown.
+    expect(find.byKey(const ValueKey('t2')), findsOneWidget);
+  });
+
   testWidgets('category screen can add an app to the category', (tester) async {
     final cat = AppCategory(id: 'c1', name: '工具', emoji: '🛠');
     final state = AppState(_MemStorage())

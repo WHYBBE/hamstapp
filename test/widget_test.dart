@@ -458,6 +458,41 @@ void main() {
     expect(onFirst, isNot(contains('com.a')));
   });
 
+  test('adding a page makes it the current one', () async {
+    final state = AppState(_MemStorage());
+    state.tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)];
+    state.currentTilePageIndex = 0;
+
+    final page = await state.addTilePage('P2');
+
+    expect(state.tilePages.length, 2);
+    expect(state.tilePages.last.id, page.id);
+    expect(state.currentTilePageId, page.id);
+    expect(state.currentTilePageIndex, 1);
+  });
+
+  test('deleting an earlier page keeps the same logical page in view', () async {
+    final state = AppState(_MemStorage());
+    state.tilePages = [
+      TilePage(id: 'p1', name: 'P1', createdAt: 0),
+      TilePage(id: 'p2', name: 'P2', createdAt: 0),
+      TilePage(id: 'p3', name: 'P3', createdAt: 0),
+    ];
+    // Viewing P2, delete P1 -> P2 shifts to index 0 and must stay visible.
+    state.currentTilePageIndex = 1;
+    expect(state.currentTilePageId, 'p2');
+
+    await state.deleteTilePage('p1');
+
+    expect(state.currentTilePageId, 'p2');
+    expect(state.currentTilePageIndex, 0);
+
+    // Deleting the current page falls back to a valid page.
+    await state.deleteTilePage('p2');
+    expect(state.currentTilePageIndex, lessThan(state.tilePages.length));
+    expect(state.currentTilePageId, isNotNull);
+  });
+
   test('search matches pinyin initials and full pinyin', () {
     expect(AppSearch.score('com.tencent.mm', '微信', 'wx'), isNotNull);
     expect(AppSearch.score('com.tencent.mm', '微信', 'weixin'), isNotNull);
