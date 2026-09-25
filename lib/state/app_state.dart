@@ -36,6 +36,9 @@ enum AppSort { name, installTime, updateTime, size }
 /// Ordering for the "recent" quick-launch tab.
 enum RecentSort { recent, frequent }
 
+/// Ordering for the category list on the launch screen.
+enum CategorySort { manual, name, count }
+
 /// How the app-level navigation is presented.
 ///
 /// - [auto]: follow the device. Tablets in landscape get a side rail; phones
@@ -426,6 +429,63 @@ class AppState extends ChangeNotifier {
       _kCategories,
       categories.map((c) => c.toMap()).toList(),
     );
+  }
+
+  /// How many installed apps belong to category [id].
+  int categoryAppCount(String id) =>
+      apps.where((a) => metaFor(a.packageName).categoryIds.contains(id)).length;
+
+  /// User-selected ordering for the category list. Defaults to manual (the
+  /// stored order).
+  CategorySort get categorySort {
+    final raw = settings['category_sort'] as String?;
+    return CategorySort.values.firstWhere(
+      (s) => s.name == raw,
+      orElse: () => CategorySort.manual,
+    );
+  }
+
+  Future<void> setCategorySort(CategorySort sort) async {
+    settings['category_sort'] = sort.name;
+    await _persistSettings();
+    notifyListeners();
+  }
+
+  /// Categories ordered according to [categorySort] (the stored order is never
+  /// mutated by sorting).
+  List<AppCategory> get sortedCategories {
+    final list = List<AppCategory>.from(categories);
+    switch (categorySort) {
+      case CategorySort.manual:
+        break;
+      case CategorySort.name:
+        list.sort(
+          (a, b) =>
+              AppSearch.pinyinKey(a.name)
+                  .compareTo(AppSearch.pinyinKey(b.name)),
+        );
+      case CategorySort.count:
+        list.sort((a, b) {
+          final c = categoryAppCount(b.id).compareTo(categoryAppCount(a.id));
+          if (c != 0) return c;
+          return AppSearch.pinyinKey(a.name)
+              .compareTo(AppSearch.pinyinKey(b.name));
+        });
+    }
+    return list;
+  }
+
+  /// Move a category while in manual sort mode (drag to reorder).
+  ///
+  /// [newIndex] is the final insertion index *after* the item has been removed
+  /// (matching `ReorderableListView.onReorderItem`).
+  Future<void> moveCategory(int oldIndex, int newIndex) async {
+    if (oldIndex < 0 || oldIndex >= categories.length) return;
+    final c = categories.removeAt(oldIndex);
+    final target = newIndex.clamp(0, categories.length);
+    categories.insert(target, c);
+    await _persistCategories();
+    notifyListeners();
   }
 
   // ---------------------------------------------------------------- snapshots

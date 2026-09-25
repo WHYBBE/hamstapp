@@ -289,6 +289,44 @@ void main() {
     expect(remaining, {'com.plain'});
   });
 
+  test('category list can be sorted by name or app count', () async {
+    final state = AppState(_MemStorage());
+    state.apps = [_ai('com.1', 'A'), _ai('com.2', 'B'), _ai('com.3', 'C')];
+    final tools = await state.addCategory('工具');
+    final games = await state.addCategory('游戏');
+    await state.addCategory('阅读'); // no apps
+
+    state.metaFor('com.1').categoryIds = [tools.id];
+    state.metaFor('com.2').categoryIds = [games.id];
+    state.metaFor('com.3').categoryIds = [games.id];
+
+    await state.setCategorySort(CategorySort.name);
+    expect(
+      state.sortedCategories.map((c) => c.name).toList(),
+      ['工具', '游戏', '阅读'], // gongju < youxi < yuedu
+    );
+
+    await state.setCategorySort(CategorySort.count);
+    expect(
+      state.sortedCategories.map((c) => c.name).toList(),
+      ['游戏', '工具', '阅读'], // 2, 1, 0 apps
+    );
+  });
+
+  test('moveCategory reorders in manual mode', () async {
+    final state = AppState(_MemStorage());
+    await state.addCategory('A');
+    await state.addCategory('B');
+    await state.addCategory('C');
+
+    // onReorderItem semantics: newIndex is already adjusted after removal.
+    await state.moveCategory(0, 2);
+    expect(state.categories.map((c) => c.name).toList(), ['B', 'C', 'A']);
+
+    await state.moveCategory(2, 0);
+    expect(state.categories.map((c) => c.name).toList(), ['A', 'B', 'C']);
+  });
+
   test('addTile pins to the current page and allows duplicates', () async {
     final state = AppState(_MemStorage());
     state.tilePages = [

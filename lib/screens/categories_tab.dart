@@ -27,44 +27,111 @@ class CategoriesTab extends StatelessWidget {
         ),
       );
     }
-    return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 24),
-      itemCount: state.categories.length,
-      itemBuilder: (context, i) {
-        final c = state.categories[i];
-        final count = state.apps
-            .where(
-              (a) => state.metaFor(a.packageName).categoryIds.contains(c.id),
-            )
-            .length;
-        return ListTile(
-          leading: CircleAvatar(
-            backgroundColor: Color(c.colorValue).withValues(alpha: 0.18),
-            child: Text(c.emoji),
+    final cats = state.sortedCategories;
+    final manual = state.categorySort == CategorySort.manual;
+
+    Widget tile(BuildContext context, AppCategory c) {
+      final count = state.categoryAppCount(c.id);
+      return ListTile(
+        key: ValueKey(c.id),
+        leading: CircleAvatar(
+          backgroundColor: Color(c.colorValue).withValues(alpha: 0.18),
+          child: Text(c.emoji),
+        ),
+        title: Text(
+          c.name,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text('$count 个应用'),
+        trailing: PopupMenuButton<String>(
+          onSelected: (v) {
+            if (v == 'edit') showCategoryEditor(context, state, c);
+            if (v == 'delete') confirmDeleteCategory(context, state, c);
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'edit', child: Text('编辑')),
+            PopupMenuItem(value: 'delete', child: Text('删除')),
+          ],
+        ),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CategoryAppsScreen(state: state, category: c),
           ),
-          title: Text(
-            c.name,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Text('$count 个应用'),
-          trailing: PopupMenuButton<String>(
-            onSelected: (v) {
-              if (v == 'edit') showCategoryEditor(context, state, c);
-              if (v == 'delete') confirmDeleteCategory(context, state, c);
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'edit', child: Text('编辑')),
-              PopupMenuItem(value: 'delete', child: Text('删除')),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        _SortBar(state: state, total: cats.length, manual: manual),
+        Expanded(
+          child: manual
+              // Manual mode: drag a row by its handle to persist the order.
+              ? ReorderableListView.builder(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  itemCount: cats.length,
+                  onReorderItem: state.moveCategory,
+                  itemBuilder: (context, i) => tile(context, cats[i]),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  itemCount: cats.length,
+                  itemBuilder: (context, i) => tile(context, cats[i]),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Compact header showing the category count and the sort selector.
+class _SortBar extends StatelessWidget {
+  const _SortBar({
+    required this.state,
+    required this.total,
+    required this.manual,
+  });
+
+  final AppState state;
+  final int total;
+  final bool manual;
+
+  static const _labels = {
+    CategorySort.manual: '手动排序',
+    CategorySort.name: '按名称',
+    CategorySort.count: '按应用数',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final hint = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 6, 0),
+      child: Row(
+        children: [
+          Text('$total 个分类', style: TextStyle(fontSize: 12, color: hint)),
+          if (manual) ...[
+            const SizedBox(width: 8),
+            Text('· 拖动行可排序', style: TextStyle(fontSize: 12, color: hint)),
+          ],
+          const Spacer(),
+          PopupMenuButton<CategorySort>(
+            tooltip: '分类排序',
+            icon: const Icon(Icons.sort, size: 20),
+            initialValue: state.categorySort,
+            onSelected: state.setCategorySort,
+            itemBuilder: (_) => [
+              for (final e in _labels.entries)
+                CheckedPopupMenuItem(
+                  value: e.key,
+                  checked: state.categorySort == e.key,
+                  child: Text(e.value),
+                ),
             ],
           ),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CategoryAppsScreen(state: state, category: c),
-            ),
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
 }

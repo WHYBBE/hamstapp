@@ -51,6 +51,9 @@ class AppSearch {
 
   static void clearCache() => _cache.clear();
 
+  /// Lowercased full pinyin (latin characters preserved) for sorting names.
+  static String pinyinKey(String s) => _safePinyin(s).toLowerCase();
+
   static String _safePinyin(String s) {
     try {
       return PinyinHelper.getPinyinE(s, separator: '');
@@ -92,8 +95,9 @@ class AppSearch {
     List<AppInfo> list;
     if (q.isEmpty) {
       list = List<AppInfo>.from(apps)
-        ..sort((a, b) =>
-            a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
+        ..sort(
+          (a, b) => a.appName.toLowerCase().compareTo(b.appName.toLowerCase()),
+        );
     } else {
       final scored = <MapEntry<AppInfo, int>>[];
       for (final a in apps) {
@@ -103,9 +107,9 @@ class AppSearch {
       scored.sort((a, b) {
         final c = b.value.compareTo(a.value);
         if (c != 0) return c;
-        return a.key.appName
-            .toLowerCase()
-            .compareTo(b.key.appName.toLowerCase());
+        return a.key.appName.toLowerCase().compareTo(
+          b.key.appName.toLowerCase(),
+        );
       });
       list = scored.map((e) => e.key).toList();
     }
