@@ -1,8 +1,33 @@
 /// Number of grid columns per row on the tile board (one row = 6 cells).
+///
+/// This is also the maximum width of a single tile, so persisted tile sizes
+/// stay valid on the narrowest (phone) board. Wider screens render *more*
+/// columns (see [tileColumnsForWidth]) rather than bigger cells.
 const int kTileCols = 6;
 
 /// Allowed tile size range (1..kTileCols wide, 1..kTileMaxH tall).
 const int kTileMaxH = 6;
+
+/// Comfortable logical cell size (dp) the adaptive grid aims for.
+const double kTileTargetCell = 72;
+
+/// Upper bound on the number of columns shown on very wide screens.
+const int kTileMaxCols = 16;
+
+/// The board is centered and clamped to this width so cells never balloon on
+/// large tablets/foldables.
+const double kTileBoardMaxWidth = 1200;
+
+/// Column count for a board of [width] logical pixels.
+///
+/// Phones keep the classic 6 columns; wider devices get more columns so the
+/// cell (and therefore every tile/icon) stays close to [kTileTargetCell]
+/// instead of growing with the screen.
+int tileColumnsForWidth(double width) {
+  if (width.isNaN || width <= 0) return kTileCols;
+  final cols = (width / kTileTargetCell).round();
+  return cols.clamp(kTileCols, kTileMaxCols).toInt();
+}
 
 /// Desired placement of a tile. col/row < 0 means "auto place".
 class TileSpec {

@@ -226,6 +226,41 @@ void main() {
     expect(p.row, 0);
   });
 
+  test('tile columns adapt to screen width', () {
+    expect(tileColumnsForWidth(360), 6); // phone: unchanged
+    expect(tileColumnsForWidth(411), 6);
+    expect(tileColumnsForWidth(600), 8); // tablet portrait
+    expect(tileColumnsForWidth(800), 11);
+    expect(tileColumnsForWidth(1280), kTileMaxCols); // capped
+    expect(tileColumnsForWidth(2000), kTileMaxCols);
+    expect(tileColumnsForWidth(0), 6);
+  });
+
+  test('rotating to fewer columns re-packs without losing the stored spot',
+      () {
+    const specs = [TileSpec(id: 'a', w: 2, h: 2, col: 10, row: 0)];
+    // Wide (tablet landscape): stored spot fits.
+    expect(resolveTileLayout(specs, cols: 12).placements['a']!.col, 10);
+    // Narrow (tablet portrait / phone): does not fit, so it is auto-packed.
+    expect(resolveTileLayout(specs, cols: 6).placements['a']!.col, 0);
+    // The original spec is untouched, so rotating back restores the spot.
+    expect(resolveTileLayout(specs, cols: 12).placements['a']!.col, 10);
+  });
+
+  test('moveTile respects the adaptive column count', () async {
+    final state = AppState(_MemStorage());
+    state.tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)];
+    state.apps = [_ai('com.x', 'X')];
+    final t = await state.addTile('com.x');
+
+    // A wide board allows far-right placement...
+    await state.moveTile(t.id, 10, 0, cols: 12);
+    expect(state.tileById(t.id)!.col, 10);
+    // ...while a narrow board clamps it into the visible range.
+    await state.moveTile(t.id, 10, 0, cols: 6);
+    expect(state.tileById(t.id)!.col, 4);
+  });
+
   test('addTile pins to the current page and allows duplicates', () async {
     final state = AppState(_MemStorage());
     state.tilePages = [

@@ -95,11 +95,13 @@ class AppState extends ChangeNotifier {
     settings = await _loadSettings();
     tilePages = await _loadTilePages();
     if (tilePages.isEmpty) {
-      tilePages.add(TilePage(
-        id: _newId(),
-        name: '页面 1',
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-      ));
+      tilePages.add(
+        TilePage(
+          id: _newId(),
+          name: '页面 1',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
       await _persistTilePages();
     }
     // Tiles are independent of apps; load them and migrate legacy pins
@@ -110,17 +112,19 @@ class AppState extends ChangeNotifier {
     if (tiles.isEmpty) {
       for (final m in meta.values) {
         if (!m.pinned) continue;
-        tiles.add(Tile(
-          id: _newId(),
-          packageName: m.packageName,
-          pageId: validPageIds.contains(m.tilePageId)
-              ? m.tilePageId
-              : firstPageId,
-          col: m.tileCol,
-          row: m.tileRow,
-          w: m.tileW,
-          h: m.tileH,
-        ));
+        tiles.add(
+          Tile(
+            id: _newId(),
+            packageName: m.packageName,
+            pageId: validPageIds.contains(m.tilePageId)
+                ? m.tilePageId
+                : firstPageId,
+            col: m.tileCol,
+            row: m.tileRow,
+            w: m.tileW,
+            h: m.tileH,
+          ),
+        );
       }
       if (tiles.isNotEmpty) await _persistTiles();
     }
@@ -146,8 +150,12 @@ class AppState extends ChangeNotifier {
 
   Map<String, AppMeta> _parseMeta(dynamic raw) {
     if (raw is Map) {
-      return raw.map((k, v) => MapEntry(
-          k as String, AppMeta.fromMap((v as Map).cast<String, dynamic>())));
+      return raw.map(
+        (k, v) => MapEntry(
+          k as String,
+          AppMeta.fromMap((v as Map).cast<String, dynamic>()),
+        ),
+      );
     }
     return <String, AppMeta>{};
   }
@@ -238,9 +246,12 @@ class AppState extends ChangeNotifier {
 
     final sw = Stopwatch()..start();
     try {
-      final result =
-          await NativeApps.getInstalledApps(includeSystem: includeSystemInScan);
-      result.sort((a, b) => a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
+      final result = await NativeApps.getInstalledApps(
+        includeSystem: includeSystemInScan,
+      );
+      result.sort(
+        (a, b) => a.appName.toLowerCase().compareTo(b.appName.toLowerCase()),
+      );
 
       final now = DateTime.now();
       final current = <String>{};
@@ -284,8 +295,7 @@ class AppState extends ChangeNotifier {
       pendingUninstalls = pending;
 
       apps = result;
-      await storage.writeJson(
-          _kAppsCache, apps.map((e) => e.toMap()).toList());
+      await storage.writeJson(_kAppsCache, apps.map((e) => e.toMap()).toList());
       await _persistMeta();
 
       sw.stop();
@@ -304,11 +314,10 @@ class AppState extends ChangeNotifier {
   Map<String, String> _baseline() {
     if (snapshots.isNotEmpty) {
       final latest = snapshots.reduce(
-          (a, b) => a.createdAt >= b.createdAt ? a : b);
+        (a, b) => a.createdAt >= b.createdAt ? a : b,
+      );
       if (latest.entries.isNotEmpty) {
-        return {
-          for (final e in latest.entries) e.packageName: e.appName,
-        };
+        return {for (final e in latest.entries) e.packageName: e.appName};
       }
     }
     return {for (final a in apps) a.packageName: a.appName};
@@ -371,18 +380,29 @@ class AppState extends ChangeNotifier {
 
   // ---------------------------------------------------------------- categories
 
-  Future<AppCategory> addCategory(String name,
-      {int colorValue = 0xFF6C8CFF, String emoji = '📦'}) async {
+  Future<AppCategory> addCategory(
+    String name, {
+    int colorValue = 0xFF6C8CFF,
+    String emoji = '📦',
+  }) async {
     final c = AppCategory(
-        id: _newId(), name: name, colorValue: colorValue, emoji: emoji);
+      id: _newId(),
+      name: name,
+      colorValue: colorValue,
+      emoji: emoji,
+    );
     categories.add(c);
     await _persistCategories();
     notifyListeners();
     return c;
   }
 
-  Future<void> updateCategory(AppCategory c,
-      {String? name, int? colorValue, String? emoji}) async {
+  Future<void> updateCategory(
+    AppCategory c, {
+    String? name,
+    int? colorValue,
+    String? emoji,
+  }) async {
     if (name != null) c.name = name;
     if (colorValue != null) c.colorValue = colorValue;
     if (emoji != null) c.emoji = emoji;
@@ -402,8 +422,10 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _persistCategories() async {
-    await storage
-        .writeJson(_kCategories, categories.map((c) => c.toMap()).toList());
+    await storage.writeJson(
+      _kCategories,
+      categories.map((c) => c.toMap()).toList(),
+    );
   }
 
   // ---------------------------------------------------------------- snapshots
@@ -417,21 +439,23 @@ class AppState extends ChangeNotifier {
     for (final a in apps) {
       final m = metaFor(a.packageName);
       seen.add(a.packageName);
-      entries.add(SnapshotEntry(
-        packageName: a.packageName,
-        appName: a.appName,
-        versionName: a.versionName,
-        versionCode: a.versionCode,
-        lastUpdateTime: a.lastUpdateTime,
-        firstInstallTime: a.firstInstallTime,
-        isSystem: a.isSystem,
-        sizeBytes: a.sizeBytes,
-        reason: m.reason,
-        note: m.note,
-        categoryIds: List<String>.from(m.categoryIds),
-        favorite: m.favorite,
-        pinned: m.pinned,
-      ));
+      entries.add(
+        SnapshotEntry(
+          packageName: a.packageName,
+          appName: a.appName,
+          versionName: a.versionName,
+          versionCode: a.versionCode,
+          lastUpdateTime: a.lastUpdateTime,
+          firstInstallTime: a.firstInstallTime,
+          isSystem: a.isSystem,
+          sizeBytes: a.sizeBytes,
+          reason: m.reason,
+          note: m.note,
+          categoryIds: List<String>.from(m.categoryIds),
+          favorite: m.favorite,
+          pinned: m.pinned,
+        ),
+      );
     }
 
     // Apps we've seen before that are currently uninstalled: keep their
@@ -439,23 +463,25 @@ class AppState extends ChangeNotifier {
     // restore it.
     for (final m in meta.values) {
       if (!m.isUninstalled || seen.contains(m.packageName)) continue;
-      entries.add(SnapshotEntry(
-        packageName: m.packageName,
-        appName: m.lastKnownName.isEmpty ? m.packageName : m.lastKnownName,
-        versionName: '',
-        versionCode: 0,
-        lastUpdateTime: 0,
-        firstInstallTime: 0,
-        isSystem: false,
-        sizeBytes: 0,
-        reason: m.reason,
-        note: m.note,
-        categoryIds: List<String>.from(m.categoryIds),
-        favorite: m.favorite,
-        pinned: m.pinned,
-        uninstallReason: m.uninstallReason,
-        uninstalledAt: m.uninstalledAt,
-      ));
+      entries.add(
+        SnapshotEntry(
+          packageName: m.packageName,
+          appName: m.lastKnownName.isEmpty ? m.packageName : m.lastKnownName,
+          versionName: '',
+          versionCode: 0,
+          lastUpdateTime: 0,
+          firstInstallTime: 0,
+          isSystem: false,
+          sizeBytes: 0,
+          reason: m.reason,
+          note: m.note,
+          categoryIds: List<String>.from(m.categoryIds),
+          favorite: m.favorite,
+          pinned: m.pinned,
+          uninstallReason: m.uninstallReason,
+          uninstalledAt: m.uninstalledAt,
+        ),
+      );
     }
 
     final snapshot = Snapshot(
@@ -465,12 +491,14 @@ class AppState extends ChangeNotifier {
       note: note,
       entries: entries,
       categories: categories
-          .map((c) => AppCategory(
-                id: c.id,
-                name: c.name,
-                colorValue: c.colorValue,
-                emoji: c.emoji,
-              ))
+          .map(
+            (c) => AppCategory(
+              id: c.id,
+              name: c.name,
+              colorValue: c.colorValue,
+              emoji: c.emoji,
+            ),
+          )
           .toList(),
     );
     snapshots.add(snapshot);
@@ -489,12 +517,14 @@ class AppState extends ChangeNotifier {
     final existingCatIds = categories.map((c) => c.id).toSet();
     for (final c in snapshot.categories) {
       if (existingCatIds.contains(c.id)) continue;
-      categories.add(AppCategory(
-        id: c.id,
-        name: c.name,
-        colorValue: c.colorValue,
-        emoji: c.emoji,
-      ));
+      categories.add(
+        AppCategory(
+          id: c.id,
+          name: c.name,
+          colorValue: c.colorValue,
+          emoji: c.emoji,
+        ),
+      );
       existingCatIds.add(c.id);
     }
 
@@ -508,8 +538,9 @@ class AppState extends ChangeNotifier {
       m.reason = e.reason;
       m.note = e.note;
       m.favorite = e.favorite;
-      m.categoryIds =
-          e.categoryIds.where(existingCatIds.contains).toList(growable: true);
+      m.categoryIds = e.categoryIds
+          .where(existingCatIds.contains)
+          .toList(growable: true);
       if (e.appName.isNotEmpty) m.lastKnownName = e.appName;
 
       if (e.uninstalledAt != 0 && !installed.contains(e.packageName)) {
@@ -526,11 +557,9 @@ class AppState extends ChangeNotifier {
       // when pinned and none exist, drop all tiles when no longer pinned.
       final hasTiles = tiles.any((t) => t.packageName == e.packageName);
       if (e.pinned && !hasTiles && firstPageId.isNotEmpty) {
-        tiles.add(Tile(
-          id: _newId(),
-          packageName: e.packageName,
-          pageId: firstPageId,
-        ));
+        tiles.add(
+          Tile(id: _newId(), packageName: e.packageName, pageId: firstPageId),
+        );
         tilesChanged = true;
       } else if (!e.pinned && hasTiles) {
         tiles.removeWhere((t) => t.packageName == e.packageName);
@@ -560,13 +589,18 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _persistSnapshots() async {
-    await storage
-        .writeJson(_kSnapshots, snapshots.map((s) => s.toMap()).toList());
+    await storage.writeJson(
+      _kSnapshots,
+      snapshots.map((s) => s.toMap()).toList(),
+    );
   }
 
   // ---------------------------------------------------------------- backups
 
-  Future<BackupList> addBackupList(String name, {String description = ''}) async {
+  Future<BackupList> addBackupList(
+    String name, {
+    String description = '',
+  }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final b = BackupList(
       id: _newId(),
@@ -587,8 +621,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> updateBackupList(BackupList list,
-      {String? name, String? description}) async {
+  Future<void> updateBackupList(
+    BackupList list, {
+    String? name,
+    String? description,
+  }) async {
     if (name != null) list.name = name;
     if (description != null) list.description = description;
     list.updatedAt = DateTime.now().millisecondsSinceEpoch;
@@ -617,8 +654,10 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _persistBackupLists() async {
-    await storage
-        .writeJson(_kBackupLists, backupLists.map((b) => b.toMap()).toList());
+    await storage.writeJson(
+      _kBackupLists,
+      backupLists.map((b) => b.toMap()).toList(),
+    );
   }
 
   // ---------------------------------------------------------------- tile pages
@@ -627,8 +666,10 @@ class AppState extends ChangeNotifier {
       _parseTilePages(await storage.readJson(_kTilePages));
 
   Future<void> _persistTilePages() async {
-    await storage
-        .writeJson(_kTilePages, tilePages.map((p) => p.toMap()).toList());
+    await storage.writeJson(
+      _kTilePages,
+      tilePages.map((p) => p.toMap()).toList(),
+    );
   }
 
   Future<List<Tile>> _loadTiles() async =>
@@ -682,8 +723,10 @@ class AppState extends ChangeNotifier {
     if (tilePages.isEmpty) return 0;
     final currentId = currentTilePageId;
     return tiles
-        .where((t) =>
-            t.packageName == packageName && _normalizedPageId(t) == currentId)
+        .where(
+          (t) =>
+              t.packageName == packageName && _normalizedPageId(t) == currentId,
+        )
         .length;
   }
 
@@ -693,8 +736,7 @@ class AppState extends ChangeNotifier {
     if (tilePages.isEmpty) return false;
     final currentId = currentTilePageId;
     final index = tiles.indexWhere(
-      (t) =>
-          t.packageName == packageName && _normalizedPageId(t) == currentId,
+      (t) => t.packageName == packageName && _normalizedPageId(t) == currentId,
     );
     if (index < 0) return false;
     tiles.removeAt(index);
@@ -710,8 +752,9 @@ class AppState extends ChangeNotifier {
   List<(TilePage, int)> pinLocationsFor(String packageName) {
     final out = <(TilePage, int)>[];
     for (final page in tilePages) {
-      final count =
-          tilesOnPage(page).where((t) => t.packageName == packageName).length;
+      final count = tilesOnPage(page)
+          .where((t) => t.packageName == packageName)
+          .length;
       if (count > 0) out.add((page, count));
     }
     return out;
@@ -720,8 +763,9 @@ class AppState extends ChangeNotifier {
   /// Removes every tile for [packageName] from [pageId].
   Future<void> removeTilesOnPage(String packageName, String pageId) async {
     final before = tiles.length;
-    tiles.removeWhere((t) =>
-        t.packageName == packageName && _normalizedPageId(t) == pageId);
+    tiles.removeWhere(
+      (t) => t.packageName == packageName && _normalizedPageId(t) == pageId,
+    );
     if (tiles.length == before) return;
     _syncPinned(packageName);
     await _persistTiles();
@@ -739,7 +783,8 @@ class AppState extends ChangeNotifier {
   /// Add a tile for [packageName] on [pageId] (defaults to the current page).
   /// Duplicates are allowed: the same app can be added any number of times.
   Future<Tile> addTile(String packageName, {String? pageId}) async {
-    final target = pageId ??
+    final target =
+        pageId ??
         currentTilePageId ??
         (tilePages.isEmpty ? '' : tilePages.first.id);
     final size = tileDefaultSize;
@@ -780,13 +825,18 @@ class AppState extends ChangeNotifier {
   }
 
   void _syncPinned(String packageName) {
-    metaFor(packageName).pinned =
-        tiles.any((t) => t.packageName == packageName);
+    metaFor(packageName).pinned = tiles.any(
+      (t) => t.packageName == packageName,
+    );
   }
 
   /// Add a tile for [packageName] when [value] is true (on [pageId], defaulting
   /// to the current page), otherwise remove all of its tiles.
-  Future<void> setPinned(String packageName, bool value, {String? pageId}) async {
+  Future<void> setPinned(
+    String packageName,
+    bool value, {
+    String? pageId,
+  }) async {
     final has = tiles.any((t) => t.packageName == packageName);
     if (value) {
       if (has) return;
@@ -878,21 +928,32 @@ class AppState extends ChangeNotifier {
   }
 
   /// Move a tile to the given grid cell (finds the nearest free spot on
-  /// collision).
-  Future<void> moveTile(String tileId, int col, int row) async {
+  /// collision). [cols] is the board's current column count (wider on tablets).
+  Future<void> moveTile(
+    String tileId,
+    int col,
+    int row, {
+    int cols = kTileCols,
+  }) async {
     final tile = tileById(tileId);
     if (tile == null) return;
     final page = _pageForTile(tile);
     final others = _specsForPage(page, exclude: tileId);
-    final p = resolveMove(others, tileId, col, row, tile.w, tile.h);
+    final p = resolveMove(others, tileId, col, row, tile.w, tile.h, cols: cols);
     tile.col = p.col;
     tile.row = p.row;
     await _persistTiles();
     notifyListeners();
   }
 
-  /// Change a tile's size (width 1..6, height 1..6), relocating if needed.
-  Future<void> setTileSize(String tileId, int w, int h) async {
+  /// Change a tile's size (width 1..kTileCols, height 1..kTileMaxH), relocating
+  /// if needed. [cols] is the board's current column count.
+  Future<void> setTileSize(
+    String tileId,
+    int w,
+    int h, {
+    int cols = kTileCols,
+  }) async {
     final tile = tileById(tileId);
     if (tile == null) return;
     final cw = w.clamp(1, kTileCols);
@@ -906,6 +967,7 @@ class AppState extends ChangeNotifier {
       tile.row < 0 ? 0 : tile.row,
       cw,
       ch,
+      cols: cols,
     );
     tile.w = cw;
     tile.h = ch;
@@ -997,8 +1059,10 @@ class AppState extends ChangeNotifier {
   }
 
   static String _legacySourceId(RemoteSource s) =>
-      'src_${s.protocol}_${s.host}_${s.path}'
-          .replaceAll(RegExp(r'[^A-Za-z0-9_]+'), '_');
+      'src_${s.protocol}_${s.host}_${s.path}'.replaceAll(
+        RegExp(r'[^A-Za-z0-9_]+'),
+        '_',
+      );
 
   static String newSyncSourceId() =>
       'src_${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
@@ -1096,8 +1160,7 @@ class AppState extends ChangeNotifier {
   Map<String, int> packageCounts(Map<String, dynamic> pkg) {
     final data = pkg['data'];
     if (data is! Map) return const <String, int>{};
-    int len(Object? v) =>
-        v is List ? v.length : (v is Map ? v.length : 0);
+    int len(Object? v) => v is List ? v.length : (v is Map ? v.length : 0);
     return <String, int>{
       '应用': len(data['apps']),
       '分组': len(data['categories']),
@@ -1137,7 +1200,7 @@ class AppState extends ChangeNotifier {
           id: _newId(),
           name: '页面 1',
           createdAt: DateTime.now().millisecondsSinceEpoch,
-        )
+        ),
       ];
     }
     final validPageIds = newPages.map((p) => p.id).toSet();
@@ -1179,7 +1242,7 @@ class AppState extends ChangeNotifier {
         id: _newId(),
         name: '页面 1',
         createdAt: DateTime.now().millisecondsSinceEpoch,
-      )
+      ),
     ];
     apps = <AppInfo>[];
     settings = <String, dynamic>{};
@@ -1284,8 +1347,9 @@ class AppState extends ChangeNotifier {
     // While searching, rank by relevance rather than the selected sort order.
     if (q.isNotEmpty) {
       list.sort((a, b) {
-        final c =
-            (scores[b.packageName] ?? 0).compareTo(scores[a.packageName] ?? 0);
+        final c = (scores[b.packageName] ?? 0).compareTo(
+          scores[a.packageName] ?? 0,
+        );
         if (c != 0) return c;
         return a.appName.toLowerCase().compareTo(b.appName.toLowerCase());
       });
@@ -1294,8 +1358,9 @@ class AppState extends ChangeNotifier {
 
     switch (sort) {
       case AppSort.name:
-        list.sort((a, b) =>
-            a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
+        list.sort(
+          (a, b) => a.appName.toLowerCase().compareTo(b.appName.toLowerCase()),
+        );
         break;
       case AppSort.installTime:
         list.sort((a, b) => b.firstInstallTime.compareTo(a.firstInstallTime));
@@ -1310,11 +1375,10 @@ class AppState extends ChangeNotifier {
     return list;
   }
 
-  List<AppInfo> get favorites => apps
-      .where((a) => metaFor(a.packageName).favorite)
-      .toList()
-    ..sort((a, b) =>
-        a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
+  List<AppInfo> get favorites =>
+      apps.where((a) => metaFor(a.packageName).favorite).toList()..sort(
+        (a, b) => a.appName.toLowerCase().compareTo(b.appName.toLowerCase()),
+      );
 
   /// Apps launched from this app, most recent first.
   List<AppInfo> get recentApps => recentAppsBy(RecentSort.recent);
@@ -1334,7 +1398,9 @@ class AppState extends ChangeNotifier {
 
     switch (sort) {
       case RecentSort.recent:
-        list.sort((a, b) => lastAt(b.packageName).compareTo(lastAt(a.packageName)));
+        list.sort(
+          (a, b) => lastAt(b.packageName).compareTo(lastAt(a.packageName)),
+        );
       case RecentSort.frequent:
         list.sort((a, b) {
           final c = count(b.packageName).compareTo(count(a.packageName));

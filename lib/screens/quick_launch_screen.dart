@@ -373,6 +373,7 @@ class _TileBoardState extends State<_TileBoard> {
   int _dragCol = 0;
   int _dragRow = 0;
   double _cellW = 60;
+  int _cols = kTileCols;
   Offset _dragStart = Offset.zero;
   Offset _dragStartLocal = Offset.zero;
 
@@ -398,7 +399,7 @@ class _TileBoardState extends State<_TileBoard> {
     if (_dragId != tileId) return;
     final unit = _cellW + _gap;
     final local = _dragStartLocal + (globalPosition - _dragStart);
-    final col = ((local.dx - _pad) / unit).round().clamp(0, kTileCols - _dragW);
+    final col = ((local.dx - _pad) / unit).round().clamp(0, _cols - _dragW);
     final row = ((local.dy - _pad) / unit).round();
     if (row < 0) return;
     if (col != _dragCol || row != _dragRow) {
@@ -410,7 +411,7 @@ class _TileBoardState extends State<_TileBoard> {
   }
 
   void _endDrag(String tileId) {
-    widget.state.moveTile(tileId, _dragCol, _dragRow);
+    widget.state.moveTile(tileId, _dragCol, _dragRow, cols: _cols);
     setState(() => _dragId = null);
   }
 
@@ -437,10 +438,19 @@ class _TileBoardState extends State<_TileBoard> {
 
     final board = LayoutBuilder(
       builder: (context, constraints) {
-        final cellW =
-            (constraints.maxWidth - _pad * 2 - _gap * (kTileCols - 1)) /
-            kTileCols;
+        // Adapt the column count to the available width so tablets get more
+        // (smaller) cells instead of ballooning phone-sized cells. The board is
+        // clamped and centered so cells stay bounded on very wide screens.
+        final boardWidth = constraints.maxWidth > kTileBoardMaxWidth
+            ? kTileBoardMaxWidth
+            : constraints.maxWidth;
+        final cols = tileColumnsForWidth(boardWidth);
+        _cols = cols;
+        final cellW = (boardWidth - _pad * 2 - _gap * (cols - 1)) / cols;
         _cellW = cellW;
+        // Rotating (or resizing the window) can change the column count; stored
+        // positions that no longer fit are auto-packed by the layout, without
+        // overwriting them, so rotating back restores the original placement.
         final specs = pageTiles.map((t) {
           final resizing = t.id == _resizeId;
           return TileSpec(
@@ -451,7 +461,7 @@ class _TileBoardState extends State<_TileBoard> {
             row: t.row,
           );
         }).toList();
-        final layout = resolveTileLayout(specs);
+        final layout = resolveTileLayout(specs, cols: cols);
         final rows = layout.rows;
         // While dragging, extend the board so the highlighted target row is
         // always reachable (and the grid keeps drawing behind it).
@@ -471,140 +481,147 @@ class _TileBoardState extends State<_TileBoard> {
         double h(int n) => n * cellW + (n - 1) * _gap;
 
         return SingleChildScrollView(
-          child: SizedBox(
-            key: _boardKey,
-            height: boardHeight,
-            width: double.infinity,
-            child: Stack(
-              // The child list must keep a stable structure across drag start:
-              // inserting/removing children shifts the list, which disposes the
-              // active Draggable and cancels the move. So the highlight slot is
-              // always present in edit mode and only its content toggles.
-              children: [
-                if (editable)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(
-                        painter: _TileGridPainter(
-                          cellW: cellW,
-                          gap: _gap,
-                          pad: _pad,
-                          cols: kTileCols,
-                          rows: rowsShown,
-                          color: Theme.of(context).colorScheme.outline
-                              .withValues(alpha: 0.3),
-                        ),
-                      ),
-                    ),
-                  ),
-                if (editable && pageTiles.isEmpty)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Text(
-                            '点右上角 ➕ 选择要置顶的应用\n长按拖动移动，拖右下角缩放',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey.shade600),
+          child: Center(
+            child: SizedBox(
+              key: _boardKey,
+              height: boardHeight,
+              width: boardWidth,
+              child: Stack(
+                // The child list must keep a stable structure across drag start:
+                // inserting/removing children shifts the list, which disposes the
+                // active Draggable and cancels the move. So the highlight slot is
+                // always present in edit mode and only its content toggles.
+                children: [
+                  if (editable)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _TileGridPainter(
+                            cellW: cellW,
+                            gap: _gap,
+                            pad: _pad,
+                            cols: cols,
+                            rows: rowsShown,
+                            color: Theme.of(context).colorScheme.outline
+                                .withValues(alpha: 0.3),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                if (editable)
-                  Positioned(
-                    left: x(_dragCol),
-                    top: y(_dragRow),
-                    width: w(_dragW),
-                    height: h(_dragH),
-                    child: IgnorePointer(
-                      child: _dragId == null
-                          ? const SizedBox.shrink()
-                          : DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.9),
-                                  width: 2,
+                  if (editable && pageTiles.isEmpty)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(
+                              '点右上角 ➕ 选择要置顶的应用\n长按拖动移动，拖右下角缩放',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (editable)
+                    Positioned(
+                      left: x(_dragCol),
+                      top: y(_dragRow),
+                      width: w(_dragW),
+                      height: h(_dragH),
+                      child: IgnorePointer(
+                        child: _dragId == null
+                            ? const SizedBox.shrink()
+                            : DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                    width: 2,
+                                  ),
                                 ),
                               ),
-                            ),
+                      ),
                     ),
-                  ),
-                for (final t in pageTiles)
-                  Builder(
-                    builder: (context) {
-                      final app = state.appByPackage(t.packageName);
-                      if (app == null) return const SizedBox.shrink();
-                      final p = layout.placements[t.id]!;
-                      return Positioned(
-                        left: x(p.col),
-                        top: y(p.row),
-                        width: w(p.w),
-                        height: h(p.h),
-                        child: _Tile(
-                          key: ValueKey(t.id),
-                          tile: t,
-                          app: app,
-                          state: state,
-                          cellW: cellW,
-                          gap: _gap,
-                          editable: editable,
-                          onPointerDown: (pos) => _downGlobal = pos,
-                          onDragStart: () => _startDrag(t.id, p.col, p.row),
-                          onDragUpdate: (pos) => _updateDrag(t.id, pos),
-                          onDragEnd: () => _endDrag(t.id),
-                          onDragCancel: _cancelDrag,
-                        ),
-                      );
-                    },
-                  ),
-                if (editable)
                   for (final t in pageTiles)
                     Builder(
                       builder: (context) {
+                        final app = state.appByPackage(t.packageName);
+                        if (app == null) return const SizedBox.shrink();
                         final p = layout.placements[t.id]!;
-                        final tileW = w(p.w);
-                        final tileH = h(p.h);
-                        // Keep the grip a corner-only target: shrink it on small
-                        // tiles so it never covers most of a 1x1 tile (which made
-                        // moving small tiles fight with resizing). The dragged
-                        // tile's grip is swapped for an empty box (not removed) so
-                        // the child list stays structurally stable.
-                        final shortest = tileW < tileH ? tileW : tileH;
-                        final handle = (shortest * 0.5).clamp(
-                          28.0,
-                          _kHandleSize,
-                        );
                         return Positioned(
-                          left: x(p.col) + tileW - handle,
-                          top: y(p.row) + tileH - handle,
-                          width: handle,
-                          height: handle,
-                          child: _dragId == t.id
-                              ? const SizedBox.shrink()
-                              : _ResizeHandle(
-                                  state: state,
-                                  tileId: t.id,
-                                  cellW: cellW,
-                                  gap: _gap,
-                                  gripSize: handle * 0.55,
-                                  onPreview: (pw, ph) => setState(() {
-                                    _resizeId = t.id;
-                                    _resizeW = pw;
-                                    _resizeH = ph;
-                                  }),
-                                  onEnd: () {
-                                    state.setTileSize(t.id, _resizeW, _resizeH);
-                                    setState(() => _resizeId = null);
-                                  },
-                                ),
+                          left: x(p.col),
+                          top: y(p.row),
+                          width: w(p.w),
+                          height: h(p.h),
+                          child: _Tile(
+                            key: ValueKey(t.id),
+                            tile: t,
+                            app: app,
+                            state: state,
+                            cellW: cellW,
+                            gap: _gap,
+                            editable: editable,
+                            onPointerDown: (pos) => _downGlobal = pos,
+                            onDragStart: () => _startDrag(t.id, p.col, p.row),
+                            onDragUpdate: (pos) => _updateDrag(t.id, pos),
+                            onDragEnd: () => _endDrag(t.id),
+                            onDragCancel: _cancelDrag,
+                          ),
                         );
                       },
                     ),
-              ],
+                  if (editable)
+                    for (final t in pageTiles)
+                      Builder(
+                        builder: (context) {
+                          final p = layout.placements[t.id]!;
+                          final tileW = w(p.w);
+                          final tileH = h(p.h);
+                          // Keep the grip a corner-only target: shrink it on small
+                          // tiles so it never covers most of a 1x1 tile (which made
+                          // moving small tiles fight with resizing). The dragged
+                          // tile's grip is swapped for an empty box (not removed) so
+                          // the child list stays structurally stable.
+                          final shortest = tileW < tileH ? tileW : tileH;
+                          final handle = (shortest * 0.5).clamp(
+                            28.0,
+                            _kHandleSize,
+                          );
+                          return Positioned(
+                            left: x(p.col) + tileW - handle,
+                            top: y(p.row) + tileH - handle,
+                            width: handle,
+                            height: handle,
+                            child: _dragId == t.id
+                                ? const SizedBox.shrink()
+                                : _ResizeHandle(
+                                    state: state,
+                                    tileId: t.id,
+                                    cellW: cellW,
+                                    gap: _gap,
+                                    gripSize: handle * 0.55,
+                                    onPreview: (pw, ph) => setState(() {
+                                      _resizeId = t.id;
+                                      _resizeW = pw;
+                                      _resizeH = ph;
+                                    }),
+                                    onEnd: () {
+                                      state.setTileSize(
+                                        t.id,
+                                        _resizeW,
+                                        _resizeH,
+                                        cols: cols,
+                                      );
+                                      setState(() => _resizeId = null);
+                                    },
+                                  ),
+                          );
+                        },
+                      ),
+                ],
+              ),
             ),
           ),
         );
