@@ -207,15 +207,47 @@ class CategoryAppsScreen extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  trailing: IconButton(
-                    tooltip: context.strings.t('移出分类'),
-                    icon: const Icon(Icons.remove_circle_outline),
-                    onPressed: () {
-                      final ids = List<String>.from(
-                        s.metaFor(app.packageName).categoryIds,
-                      )..remove(category.id);
-                      s.updateMeta(app.packageName, categoryIds: ids);
-                    },
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: context.strings.t('启动'),
+                        icon: const Icon(
+                          Icons.rocket_launch_outlined,
+                          size: 20,
+                        ),
+                        onPressed: () => launchApp(context, app.packageName),
+                      ),
+                      PopupMenuButton<String>(
+                        tooltip: context.strings.t('更多'),
+                        onSelected: (v) {
+                          if (v == 'detail') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    AppDetailScreen(packageName: app.packageName),
+                              ),
+                            );
+                          } else if (v == 'remove') {
+                            final ids = List<String>.from(
+                              s.metaFor(app.packageName).categoryIds,
+                            )..remove(category.id);
+                            s.updateMeta(app.packageName, categoryIds: ids);
+                          }
+                        },
+                        itemBuilder: (_) => [
+                          PopupMenuItem(
+                            value: 'detail',
+                            child: Text(context.strings.t('应用详情')),
+                          ),
+                          PopupMenuItem(
+                            value: 'remove',
+                            child: Text(context.strings.t('移出分类')),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                   onTap: () => launchApp(context, app.packageName),
                   onLongPress: () => Navigator.push(

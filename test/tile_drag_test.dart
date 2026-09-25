@@ -198,7 +198,22 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(state.metaFor('com.a').categoryIds, contains('c1'));
-    expect(find.byTooltip('移出分类'), findsOneWidget);
+
+    // Close the picker sheet (tap the barrier above it).
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // Launch is the default action; removal moved into the "more" menu.
+    expect(find.byTooltip('启动'), findsOneWidget);
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('移出分类'), findsOneWidget);
+    await tester.tap(find.text('移出分类'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(state.metaFor('com.a').categoryIds, isNot(contains('c1')));
   });
 
   testWidgets('category editor accepts a custom emoji', (tester) async {

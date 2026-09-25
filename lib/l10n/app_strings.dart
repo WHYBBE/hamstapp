@@ -527,6 +527,7 @@ const Map<String, String> _en = <String, String>{
   '版本：{version}{code}': 'Version: {version}{code}',
   '确定要卸载「{name}」吗？': 'Uninstall "{name}"?',
   '语言': 'Language',
+  '更多': 'More',
   '跟随系统语言': 'Follow system',
   '页面 1': 'Page 1',
   '（无磁贴页）': '(no tile page)',
