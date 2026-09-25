@@ -19,6 +19,7 @@ import jcifs.CIFSContext
 import jcifs.config.PropertyConfiguration
 import jcifs.context.BaseContext
 import jcifs.smb.NtlmPasswordAuthenticator
+import jcifs.smb.SmbException
 import jcifs.smb.SmbFile
 import org.apache.commons.net.ftp.FTPClient
 import org.apache.commons.net.ftp.FTPFile
@@ -237,17 +238,47 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
     private fun boolArg(m: Map<*, *>, key: String): Boolean =
         m[key] as? Boolean ?: false
 
-    /** First non-blank message in the cause chain, for a useful error toast. */
+    /**
+     * Full cause chain plus any SMB NT status, joined with " | ".
+     *
+     * jcifs wraps the useful details: the outer message is often a generic
+     * "Session setup failed" while the real NT status (LOGON_FAILURE, bad
+     * password, ...) lives on a nested SmbException. Surfacing it makes the
+     * error actionable.
+     */
     private fun describe(t: Throwable): String {
+        val parts = ArrayList<String>()
         var cur: Throwable? = t
         val seen = HashSet<Throwable>()
         while (cur != null && seen.add(cur)) {
             val m = cur.message
-            if (!m.isNullOrBlank()) return m
+            if (!m.isNullOrBlank() && !parts.contains(m)) parts.add(m)
+            if (cur is SmbException) {
+                val code = runCatching { cur.ntStatus }.getOrDefault(0)
+                if (code != 0) {
+                    val hex = "0x" + Integer.toHexString(code).uppercase()
+                    val hint = ntStatusHint(code)
+                    val extra = if (hint.isEmpty()) hex else "$hex $hint"
+                    if (!parts.contains(extra)) parts.add(extra)
+                }
+            }
             cur = cur.cause?.takeIf { it !== cur }
         }
-        return t.javaClass.simpleName
+        return if (parts.isEmpty()) t.javaClass.simpleName else parts.joinToString(" | ")
     }
+
+    /** Friendly text for the SMB NT status codes users hit most often. */
+    private fun ntStatusHint(code: Int): String =
+        when (code.toLong() and 0xFFFFFFFFL) {
+            0xC000006DL -> "账号或密码错误"
+            0xC000006AL -> "密码错误"
+            0xC0000064L -> "用户名不存在"
+            0xC000006EL -> "账户限制"
+            0xC000006FL, 0xC0000070L, 0xC0000072L -> "账户被禁用或锁定"
+            0xC000015BL -> "登录类型不被允许"
+            0xC0000071L -> "密码已过期"
+            else -> ""
+        }
 
     /** Lists `.apk` files from an FTP or SMB (Samba) source. */
     private fun listRemoteApks(config: Map<*, *>): List<Map<String, Any?>> {
@@ -308,6 +339,7 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
         val anonymous = boolArg(config, "anonymous")
         val user = strArg(config, "username")
         val pass = strArg(config, "password")
+        val domain = strArg(config, "domain")
         val path = strArg(config, "path").trim('/')
         require(path.isNotEmpty()) { "请填写共享路径，例如 share/apks" }
 
@@ -323,6 +355,9 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
         props.setProperty("jcifs.smb.client.responseTimeout", "30000")
         props.setProperty("jcifs.smb.client.soTimeout", "35000")
         props.setProperty("jcifs.smb.client.dfs.disabled", "true")
+        // NTLMv2 only, matching what modern Samba/Windows/NAS expect.
+        props.setProperty("jcifs.smb.lmCompatibility", "3")
+        props.setProperty("jcifs.smb.client.useUnicode", "true")
         if (port != 445) props.setProperty("jcifs.smb.client.port", port.toString())
 
         val base = BaseContext(PropertyConfiguration(props))
@@ -330,7 +365,9 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
             val ctx: CIFSContext = if (anonymous) {
                 base.withAnonymousCredentials()
             } else {
-                base.withCredentials(NtlmPasswordAuthenticator("", user, pass))
+                // A blank domain is fine for Samba local users; Windows local
+                // accounts / domains need it ("WORKGROUP", "NAS\user", ...).
+                base.withCredentials(NtlmPasswordAuthenticator(domain, user, pass))
             }
             val portPart = if (port != 445) ":$port" else ""
             val dir = SmbFile("smb://$host$portPart/$path/", ctx)

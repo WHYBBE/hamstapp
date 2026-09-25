@@ -8,6 +8,9 @@ class RemoteSource {
   String password;
   bool anonymous;
 
+  /// SMB domain/workgroup (optional, e.g. `WORKGROUP` or the NAS name).
+  String domain;
+
   /// Use HTTPS/TLS (WebDAV only).
   bool secure;
 
@@ -19,6 +22,7 @@ class RemoteSource {
     this.username = '',
     this.password = '',
     this.anonymous = true,
+    this.domain = '',
     this.secure = false,
   });
 
@@ -33,6 +37,7 @@ class RemoteSource {
       username: map['username'] as String? ?? '',
       password: map['password'] as String? ?? '',
       anonymous: map['anonymous'] as bool? ?? true,
+      domain: map['domain'] as String? ?? '',
       secure: secure,
     );
   }
@@ -45,6 +50,7 @@ class RemoteSource {
         'username': username,
         'password': password,
         'anonymous': anonymous,
+        'domain': domain,
         'secure': secure,
       };
 
@@ -88,6 +94,7 @@ class RemoteSource {
         'username': username,
         'password': password,
         'anonymous': anonymous,
+        'domain': domain,
       };
 
   RemoteSource copyWith({
@@ -98,6 +105,7 @@ class RemoteSource {
     String? username,
     String? password,
     bool? anonymous,
+    String? domain,
     bool? secure,
   }) =>
       RemoteSource(
@@ -108,6 +116,7 @@ class RemoteSource {
         username: username ?? this.username,
         password: password ?? this.password,
         anonymous: anonymous ?? this.anonymous,
+        domain: domain ?? this.domain,
         secure: secure ?? this.secure,
       );
 }

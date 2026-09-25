@@ -23,6 +23,7 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
   late final TextEditingController _path;
   late final TextEditingController _username;
   late final TextEditingController _password;
+  late final TextEditingController _domain;
   late bool _anonymous;
   late bool _secure;
   bool _busy = false;
@@ -38,6 +39,7 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
     _path = TextEditingController(text: s.path);
     _username = TextEditingController(text: s.username);
     _password = TextEditingController(text: s.password);
+    _domain = TextEditingController(text: s.domain);
     _anonymous = s.anonymous;
     _secure = s.secure;
   }
@@ -49,6 +51,7 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
     _path.dispose();
     _username.dispose();
     _password.dispose();
+    _domain.dispose();
     super.dispose();
   }
 
@@ -61,6 +64,7 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
         username: _username.text,
         password: _password.text,
         anonymous: _anonymous,
+        domain: _domain.text,
         secure: _secure,
       );
 
@@ -304,6 +308,7 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
               controller: _username,
               decoration: const InputDecoration(
                 labelText: '用户名',
+                helperText: 'SMB 可用 域\\用户名（如 WORKGROUP\\why）',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -316,6 +321,18 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
                 border: OutlineInputBorder(),
               ),
             ),
+            if (_protocol == 'smb') ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _domain,
+                decoration: const InputDecoration(
+                  labelText: '域 / 工作组（可选）',
+                  hintText: 'WORKGROUP',
+                  helperText: 'Windows 本地账户或域常需填写，Samba 一般留空',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: 20),
           FilledButton.icon(
