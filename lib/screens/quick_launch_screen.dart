@@ -608,6 +608,14 @@ class _PageBar extends StatelessWidget {
         final selected = i == currentIndex;
         final count = state.pinCountOnPage(page);
         final fg = selected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant;
+        // A single glyph (one character, or one emoji even if it is a multi-code
+        // point sequence such as a ZWJ family or a flag) gets a larger font
+        // while the capsule keeps the same height/size.
+        final isSingle = !editing && page.name.trim().characters.length == 1;
+        final hPad = isSingle
+            ? 8.0
+            : (editing ? 14.0 : 10.0);
+        final baseFont = editing ? 13.0 : 12.0;
         return Padding(
           padding: EdgeInsets.symmetric(
             horizontal: 3,
@@ -618,7 +626,7 @@ class _PageBar extends StatelessWidget {
             onLongPress: () => _pageMenu(context, state, i, onChanged),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
-              padding: EdgeInsets.symmetric(horizontal: editing ? 14 : 10),
+              padding: EdgeInsets.symmetric(horizontal: hPad),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: selected
@@ -632,7 +640,8 @@ class _PageBar extends StatelessWidget {
                   Text(
                     page.name,
                     style: TextStyle(
-                      fontSize: editing ? 13 : 12,
+                      fontSize: isSingle ? 18 : baseFont,
+                      height: isSingle ? 1.0 : null,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                       color: fg,
                     ),
