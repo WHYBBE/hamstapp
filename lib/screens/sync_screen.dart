@@ -597,9 +597,12 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
   ) {
     final scheme = Theme.of(context).colorScheme;
     if (installed == null) {
-      return identityKnown
-          ? ('新安装', scheme.primary)
-          : ('新安装（未匹配）', scheme.primary);
+      // Without parsed metadata we cannot tell whether it is a new app or a
+      // package we simply could not match, so don't claim "新安装".
+      if (!identityKnown) {
+        return ('未获取信息（长按解析）', scheme.onSurfaceVariant);
+      }
+      return ('新安装', scheme.primary);
     }
     if (!identityKnown || apkVersionCode <= 0) {
       return ('更新（版本未知）', Colors.orange);
