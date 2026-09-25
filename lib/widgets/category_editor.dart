@@ -15,7 +15,18 @@ const List<int> kCategoryPalette = [
 ];
 
 const List<String> kCategoryEmojiChoices = [
-  '📦', '🎮', '🛠️', '💰', '📷', '🎵', '📚', '🛒', '💬', '🏦', '🚀', '❤️'
+  '📦',
+  '🎮',
+  '🛠️',
+  '💰',
+  '📷',
+  '🎵',
+  '📚',
+  '🛒',
+  '💬',
+  '🏦',
+  '🚀',
+  '❤️',
 ];
 
 /// Create or edit a category. Pass null [existing] to create a new one.
@@ -25,6 +36,9 @@ Future<void> showCategoryEditor(
   AppCategory? existing,
 ) async {
   final nameController = TextEditingController(text: existing?.name ?? '');
+  final emojiController = TextEditingController(
+    text: existing?.emoji ?? kCategoryEmojiChoices.first,
+  );
   var color = existing?.colorValue ?? kCategoryPalette.first;
   var emoji = existing?.emoji ?? kCategoryEmojiChoices.first;
 
@@ -42,7 +56,9 @@ Future<void> showCategoryEditor(
                 controller: nameController,
                 autofocus: true,
                 decoration: const InputDecoration(
-                    labelText: '名称', border: OutlineInputBorder()),
+                  labelText: '名称',
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 16),
               const Text('颜色'),
@@ -70,13 +86,49 @@ Future<void> showCategoryEditor(
               const SizedBox(height: 16),
               const Text('图标'),
               const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Color(color).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: emojiController,
+                      decoration: const InputDecoration(
+                        labelText: '自定义 Emoji',
+                        hintText: '粘贴或输入一个 Emoji',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (v) {
+                        final chars = v.trim().characters;
+                        if (chars.isEmpty) return;
+                        setLocal(() => emoji = chars.first);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: kCategoryEmojiChoices.map((e) {
                   final selected = e == emoji;
                   return GestureDetector(
-                    onTap: () => setLocal(() => emoji = e),
+                    onTap: () {
+                      emojiController.text = e;
+                      setLocal(() => emoji = e);
+                    },
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
@@ -95,7 +147,9 @@ Future<void> showCategoryEditor(
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
           FilledButton(
             onPressed: () async {
               final name = nameController.text.trim();
@@ -103,8 +157,12 @@ Future<void> showCategoryEditor(
               if (existing == null) {
                 await state.addCategory(name, colorValue: color, emoji: emoji);
               } else {
-                await state.updateCategory(existing,
-                    name: name, colorValue: color, emoji: emoji);
+                await state.updateCategory(
+                  existing,
+                  name: name,
+                  colorValue: color,
+                  emoji: emoji,
+                );
               }
               if (ctx.mounted) Navigator.pop(ctx);
             },
@@ -128,11 +186,13 @@ Future<void> confirmDeleteCategory(
       content: Text('删除「${c.name}」后，应用上的该分类也会移除。'),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消')),
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('取消'),
+        ),
         FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除')),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('删除'),
+        ),
       ],
     ),
   );

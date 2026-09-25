@@ -10,6 +10,7 @@ import 'package:hamstapp/screens/categories_tab.dart';
 import 'package:hamstapp/screens/quick_launch_screen.dart';
 import 'package:hamstapp/services/storage.dart';
 import 'package:hamstapp/state/app_state.dart';
+import 'package:hamstapp/widgets/category_editor.dart';
 
 class _MemStorage implements Storage {
   final Map<String, dynamic> _data = <String, dynamic>{};
@@ -198,5 +199,40 @@ void main() {
 
     expect(state.metaFor('com.a').categoryIds, contains('c1'));
     expect(find.byTooltip('移出分类'), findsOneWidget);
+  });
+
+  testWidgets('category editor accepts a custom emoji', (tester) async {
+    final state = AppState(_MemStorage())..initialized = true;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: state,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showCategoryEditor(context, state, null),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final fields = find.byType(TextField);
+    expect(fields, findsNWidgets(2)); // name + custom emoji
+    await tester.enterText(fields.first, '测试');
+    await tester.enterText(fields.at(1), '🦄');
+    await tester.pump();
+
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(state.categories.single.name, '测试');
+    expect(state.categories.single.emoji, '🦄');
   });
 }
