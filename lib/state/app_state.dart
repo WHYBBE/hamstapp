@@ -36,6 +36,15 @@ enum AppSort { name, installTime, updateTime, size }
 /// Ordering for the "recent" quick-launch tab.
 enum RecentSort { recent, frequent }
 
+/// How the app-level navigation is presented.
+///
+/// - [auto]: follow the device. Tablets in landscape get a side rail; phones
+///   and tablets in portrait stay on the normal bottom bar.
+/// - [bottom]: always the normal bottom navigation bar.
+/// - [rail]: always a left side rail (best for tablets).
+/// - [floating]: no persistent bar; a floating button reveals the navigation.
+enum NavMode { auto, bottom, rail, floating }
+
 class AppState extends ChangeNotifier {
   final Storage storage;
 
@@ -934,6 +943,32 @@ class AppState extends ChangeNotifier {
     settings['tile_default_size'] = value.clamp(1, kTileMaxH);
     await _persistSettings();
     notifyListeners();
+  }
+
+  /// User-selected navigation presentation. Defaults to [NavMode.auto].
+  NavMode get navMode {
+    final raw = settings['nav_mode'] as String?;
+    return NavMode.values.firstWhere(
+      (m) => m.name == raw,
+      orElse: () => NavMode.auto,
+    );
+  }
+
+  Future<void> setNavMode(NavMode mode) async {
+    settings['nav_mode'] = mode.name;
+    await _persistSettings();
+    notifyListeners();
+  }
+
+  /// Resolves [navMode] into a concrete mode for the given screen [size].
+  ///
+  /// Only [NavMode.auto] depends on the device: a tablet (shortest side >= 600)
+  /// held in landscape uses the side rail, everything else uses the bottom bar.
+  NavMode resolvedNavMode(double width, double height) {
+    final pref = navMode;
+    if (pref != NavMode.auto) return pref;
+    final isTablet = (width < height ? width : height) >= 600;
+    return (isTablet && width > height) ? NavMode.rail : NavMode.bottom;
   }
 
   // ---------------------------------------------------------------- sync

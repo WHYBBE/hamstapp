@@ -261,6 +261,25 @@ void main() {
     expect(t2.h, 3);
   });
 
+  test('nav mode auto picks rail on tablet landscape only', () async {
+    final state = AppState(_MemStorage());
+    expect(state.navMode, NavMode.auto);
+    // Phone portrait / landscape and tablet portrait -> bottom bar.
+    expect(state.resolvedNavMode(400, 800), NavMode.bottom);
+    expect(state.resolvedNavMode(800, 400), NavMode.bottom);
+    expect(state.resolvedNavMode(800, 1200), NavMode.bottom);
+    // Tablet landscape -> side rail.
+    expect(state.resolvedNavMode(1200, 800), NavMode.rail);
+
+    // An explicit choice overrides the device, including forcing bottom on a
+    // tablet landscape.
+    await state.setNavMode(NavMode.bottom);
+    expect(state.resolvedNavMode(1200, 800), NavMode.bottom);
+    await state.setNavMode(NavMode.rail);
+    expect(state.resolvedNavMode(400, 800), NavMode.rail);
+    expect(state.navMode, NavMode.rail);
+  });
+
   test('removing one duplicate keeps the others', () async {
     final state = AppState(_MemStorage());
     state.tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)];

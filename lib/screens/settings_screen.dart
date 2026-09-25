@@ -33,6 +33,26 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
+          const _SectionHeader('导航'),
+          ListTile(
+            leading: Icon(_navModeIcon(state.navMode)),
+            title: const Text('导航栏模式'),
+            subtitle: Text(_navModeLabel(state.navMode)),
+            trailing: DropdownButton<NavMode>(
+              value: state.navMode,
+              underline: const SizedBox.shrink(),
+              onChanged: (v) {
+                if (v != null) state.setNavMode(v);
+              },
+              items: const [
+                DropdownMenuItem(value: NavMode.auto, child: Text('自动')),
+                DropdownMenuItem(value: NavMode.bottom, child: Text('底部')),
+                DropdownMenuItem(value: NavMode.rail, child: Text('侧边栏')),
+                DropdownMenuItem(value: NavMode.floating, child: Text('悬浮')),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
           const _SectionHeader('磁贴'),
           ListTile(
             leading: const Icon(Icons.grid_view_rounded),
@@ -115,6 +135,32 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+String _navModeLabel(NavMode mode) {
+  switch (mode) {
+    case NavMode.auto:
+      return '自动：平板横屏用侧边栏，手机与竖屏用底部导航';
+    case NavMode.bottom:
+      return '正常：底部导航栏（当前默认）';
+    case NavMode.rail:
+      return '侧边栏：左侧竖排，适合平板';
+    case NavMode.floating:
+      return '无导航栏：点右下角悬浮按钮展开导航';
+  }
+}
+
+IconData _navModeIcon(NavMode mode) {
+  switch (mode) {
+    case NavMode.auto:
+      return Icons.auto_awesome_mosaic_outlined;
+    case NavMode.bottom:
+      return Icons.call_to_action_outlined;
+    case NavMode.rail:
+      return Icons.view_sidebar_outlined;
+    case NavMode.floating:
+      return Icons.bubble_chart_outlined;
   }
 }
 
