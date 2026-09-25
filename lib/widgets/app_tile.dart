@@ -102,7 +102,7 @@ class AppListTile extends StatelessWidget {
         IconButton(
           tooltip: meta.favorite
               ? context.strings.t('取消收藏')
-              : context.strings.t('收藏'),
+              : context.strings.t('添加收藏'),
           icon: Icon(
             meta.favorite ? Icons.star_rounded : Icons.star_border_rounded,
             color: meta.favorite ? Colors.amber : Colors.grey,
