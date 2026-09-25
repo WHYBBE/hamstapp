@@ -693,6 +693,20 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
+  /// Removes every tile for [packageName] from the currently visible page.
+  Future<void> removeTilesOnCurrentPage(String packageName) async {
+    if (tilePages.isEmpty) return;
+    final currentId = currentTilePageId;
+    final before = tiles.length;
+    tiles.removeWhere((t) =>
+        t.packageName == packageName && _normalizedPageId(t) == currentId);
+    if (tiles.length == before) return;
+    _syncPinned(packageName);
+    await _persistTiles();
+    await _persistMeta();
+    notifyListeners();
+  }
+
   /// Add a tile for [packageName] on [pageId] (defaults to the current page).
   /// Duplicates are allowed: the same app can be added any number of times.
   Future<Tile> addTile(String packageName, {String? pageId}) async {

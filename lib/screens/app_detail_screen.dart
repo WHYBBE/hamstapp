@@ -43,6 +43,13 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
     super.dispose();
   }
 
+  String _currentPageName(AppState state) {
+    final pages = state.tilePages;
+    if (pages.isEmpty) return '无磁贴页';
+    final i = state.currentTilePageIndex.clamp(0, pages.length - 1);
+    return pages[i].name;
+  }
+
   void _schedulePersist() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
@@ -106,10 +113,15 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
           const SizedBox(height: 8),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            value: meta.pinned,
-            onChanged: (v) => state.setPinned(widget.packageName, v),
-            title: const Text('置顶到磁贴'),
-            subtitle: const Text('在「快速启动 → 磁贴」中显示（可多份）'),
+            value: state.pinCountOnCurrentPage(widget.packageName) > 0,
+            onChanged: (v) => v
+                ? state.addTile(widget.packageName,
+                    pageId: state.currentTilePageId)
+                : state.removeTilesOnCurrentPage(widget.packageName),
+            title: const Text('固定到当前磁贴页'),
+            subtitle: Text(
+              '仅作用于当前页「${_currentPageName(state)}」（可多份）',
+            ),
           ),
           const SizedBox(height: 12),
           _SectionTitle('安装原因'),
