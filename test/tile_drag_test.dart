@@ -1,0 +1,85 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+
+import 'package:hamstapp/models/app_info.dart';
+import 'package:hamstapp/models/tile.dart';
+import 'package:hamstapp/models/tile_page.dart';
+import 'package:hamstapp/screens/quick_launch_screen.dart';
+import 'package:hamstapp/services/storage.dart';
+import 'package:hamstapp/state/app_state.dart';
+
+class _MemStorage implements Storage {
+  final Map<String, dynamic> _data = <String, dynamic>{};
+  @override
+  Future<dynamic> readJson(String name) async => _data[name];
+  @override
+  Future<void> writeJson(String name, dynamic data) async {
+    _data[name] = data;
+  }
+}
+
+AppInfo _ai(String pkg, String name) => AppInfo(
+  packageName: pkg,
+  appName: name,
+  versionName: '1',
+  versionCode: 1,
+  firstInstallTime: 0,
+  lastUpdateTime: 0,
+  isSystem: false,
+  enabled: true,
+  apkPath: '',
+  sizeBytes: 0,
+  targetSdk: 33,
+  minSdk: 21,
+  uid: 0,
+);
+
+void main() {
+  testWidgets('dragging a tile moves it to a new cell', (tester) async {
+    final state = AppState(_MemStorage())
+      ..initialized = true
+      ..apps = [_ai('com.a', 'A')]
+      ..tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)]
+      ..tiles = [
+        Tile(
+          id: 't1',
+          packageName: 'com.a',
+          pageId: 'p1',
+          col: 0,
+          row: 0,
+          w: 2,
+          h: 2,
+        ),
+      ]
+      ..currentTilePageIndex = 0
+      ..tileEditMode = true;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: state,
+        child: const MaterialApp(home: QuickLaunchScreen()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final tile = find.byKey(const ValueKey('t1'));
+    expect(tile, findsOneWidget);
+
+    final start = tester.getCenter(tile);
+    final gesture = await tester.startGesture(start);
+    // Hold past the 180ms long-press delay to start the move drag.
+    await tester.pump(const Duration(milliseconds: 300));
+    // Drag right by more than one cell (~122px at the default 800px width).
+    await gesture.moveBy(const Offset(140, 0));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      state.tileById('t1')!.col,
+      greaterThan(0),
+      reason: 'tile should have moved right',
+    );
+  });
+}
