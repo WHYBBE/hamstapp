@@ -29,31 +29,31 @@ class _MemStorage implements Storage {
 }
 
 AppInfo _ai(String pkg, String name) => AppInfo(
-      packageName: pkg,
-      appName: name,
-      versionName: '1',
-      versionCode: 1,
-      firstInstallTime: 0,
-      lastUpdateTime: 0,
-      isSystem: false,
-      enabled: true,
-      apkPath: '',
-      sizeBytes: 0,
-      targetSdk: 33,
-      minSdk: 21,
-      uid: 0,
-    );
+  packageName: pkg,
+  appName: name,
+  versionName: '1',
+  versionCode: 1,
+  firstInstallTime: 0,
+  lastUpdateTime: 0,
+  isSystem: false,
+  enabled: true,
+  apkPath: '',
+  sizeBytes: 0,
+  targetSdk: 33,
+  minSdk: 21,
+  uid: 0,
+);
 
 SnapshotEntry _e(String pkg, String ver, int code) => SnapshotEntry(
-      packageName: pkg,
-      appName: pkg,
-      versionName: ver,
-      versionCode: code,
-      lastUpdateTime: 0,
-      firstInstallTime: 0,
-      isSystem: false,
-      sizeBytes: 0,
-    );
+  packageName: pkg,
+  appName: pkg,
+  versionName: ver,
+  versionCode: code,
+  lastUpdateTime: 0,
+  firstInstallTime: 0,
+  isSystem: false,
+  sizeBytes: 0,
+);
 
 void main() {
   test('snapshot diff detects added, removed and updated apps', () {
@@ -61,13 +61,21 @@ void main() {
       id: 'a',
       name: 'older',
       createdAt: 0,
-      entries: [_e('com.a', '1.0', 1), _e('com.b', '1.0', 1), _e('com.c', '1.0', 1)],
+      entries: [
+        _e('com.a', '1.0', 1),
+        _e('com.b', '1.0', 1),
+        _e('com.c', '1.0', 1),
+      ],
     );
     final newer = Snapshot(
       id: 'b',
       name: 'newer',
       createdAt: 1,
-      entries: [_e('com.a', '1.0', 1), _e('com.b', '2.0', 2), _e('com.d', '1.0', 1)],
+      entries: [
+        _e('com.a', '1.0', 1),
+        _e('com.b', '2.0', 2),
+        _e('com.d', '1.0', 1),
+      ],
     );
 
     final diff = SnapshotDiff.between(older, newer);
@@ -143,8 +151,9 @@ void main() {
     expect(a.favorite, isTrue);
     expect(a.isInstalled, isTrue);
 
-    final gone =
-        restored.entries.firstWhere((e) => e.packageName == 'com.gone');
+    final gone = restored.entries.firstWhere(
+      (e) => e.packageName == 'com.gone',
+    );
     expect(gone.uninstallReason, '不好用');
     expect(gone.isInstalled, isFalse);
     expect(restored.installedCount, 1);
@@ -236,8 +245,7 @@ void main() {
     expect(tileColumnsForWidth(0), 6);
   });
 
-  test('rotating to fewer columns re-packs without losing the stored spot',
-      () {
+  test('rotating to fewer columns re-packs without losing the stored spot', () {
     const specs = [TileSpec(id: 'a', w: 2, h: 2, col: 10, row: 0)];
     // Wide (tablet landscape): stored spot fits.
     expect(resolveTileLayout(specs, cols: 12).placements['a']!.col, 10);
@@ -259,6 +267,26 @@ void main() {
     // ...while a narrow board clamps it into the visible range.
     await state.moveTile(t.id, 10, 0, cols: 6);
     expect(state.tileById(t.id)!.col, 4);
+  });
+
+  test('unorganized filter also excludes favorites and tiled apps', () async {
+    final state = AppState(_MemStorage());
+    state.tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)];
+    state.apps = [
+      _ai('com.plain', 'Plain'),
+      _ai('com.fav', 'Fav'),
+      _ai('com.tiled', 'Tiled'),
+      _ai('com.cat', 'Cat'),
+      _ai('com.reason', 'Reason'),
+    ];
+    state.metaFor('com.fav').favorite = true;
+    state.metaFor('com.cat').categoryIds = ['c1'];
+    state.metaFor('com.reason').reason = 'because';
+    await state.addTile('com.tiled'); // pins it to a tile
+
+    state.filter = AppFilter.unorganized;
+    final remaining = state.visibleApps.map((a) => a.packageName).toSet();
+    expect(remaining, {'com.plain'});
   });
 
   test('addTile pins to the current page and allows duplicates', () async {
@@ -345,8 +373,9 @@ void main() {
 
     expect(state.tilePages.first.id, 'p2');
     expect(state.currentTilePageIndex, 0);
-    final onFirst =
-        state.tilesOnPage(state.tilePages[0]).map((t) => t.packageName);
+    final onFirst = state
+        .tilesOnPage(state.tilePages[0])
+        .map((t) => t.packageName);
     expect(onFirst, contains('com.b'));
     expect(onFirst, isNot(contains('com.a')));
   });
@@ -360,7 +389,10 @@ void main() {
 
   test('search falls back to fuzzy subsequence', () {
     // "gmap" should fuzzily match "Google Maps".
-    expect(AppSearch.score('com.google.maps', 'Google Maps', 'gmap'), isNotNull);
+    expect(
+      AppSearch.score('com.google.maps', 'Google Maps', 'gmap'),
+      isNotNull,
+    );
     // Contiguous prefix should outrank a scattered subsequence.
     final prefix = AppSearch.score('a', 'Maps', 'map')!;
     final fuzzy = AppSearch.score('a', 'Maps', 'mps')!;
@@ -398,8 +430,8 @@ void main() {
     state.settings['tile_default_size'] = 3;
 
     // Must be JSON-serialisable and re-parse cleanly.
-    final pkg = jsonDecode(jsonEncode(state.exportPackage()))
-        as Map<String, dynamic>;
+    final pkg =
+        jsonDecode(jsonEncode(state.exportPackage())) as Map<String, dynamic>;
 
     await state.clearAllData();
     expect(state.tiles, isEmpty);
@@ -420,15 +452,17 @@ void main() {
     expect(state.remoteSource.configured, isFalse);
     expect(state.remoteSource.anonymous, isTrue);
 
-    await state.setRemoteSource(RemoteSource(
-      protocol: 'smb',
-      host: 'nas.local',
-      port: 445,
-      path: 'share/apks',
-      username: 'u',
-      password: 'p',
-      anonymous: false,
-    ));
+    await state.setRemoteSource(
+      RemoteSource(
+        protocol: 'smb',
+        host: 'nas.local',
+        port: 445,
+        path: 'share/apks',
+        username: 'u',
+        password: 'p',
+        anonymous: false,
+      ),
+    );
 
     final s = state.remoteSource;
     expect(s.isSmb, isTrue);
@@ -478,7 +512,8 @@ void main() {
   });
 
   test('webdav listing handles namespace-less hrefs', () {
-    const xml = '<multistatus><response>'
+    const xml =
+        '<multistatus><response>'
         '<href>/dav/%E5%BA%94%E7%94%A8.apk</href>'
         '<getcontentlength>5</getcontentlength>'
         '</response></multistatus>';
@@ -563,18 +598,12 @@ void main() {
     final state = AppState(_MemStorage());
     expect(state.syncSources, isEmpty);
 
-    final a = await state.addSyncSource(RemoteSource(
-      name: 'NAS',
-      protocol: 'smb',
-      host: 'nas',
-      path: 'apks',
-    ));
-    final b = await state.addSyncSource(RemoteSource(
-      name: 'FTP',
-      protocol: 'ftp',
-      host: 'ftp',
-      path: '/apks',
-    ));
+    final a = await state.addSyncSource(
+      RemoteSource(name: 'NAS', protocol: 'smb', host: 'nas', path: 'apks'),
+    );
+    final b = await state.addSyncSource(
+      RemoteSource(name: 'FTP', protocol: 'ftp', host: 'ftp', path: '/apks'),
+    );
 
     expect(state.syncSources.length, 2);
     expect(state.activeSyncSourceId, b.id); // newest becomes active

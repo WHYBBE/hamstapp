@@ -39,11 +39,13 @@ class AppsScreen extends StatelessWidget {
             onPressed: () {
               ScaffoldMessenger.of(context)
                 ..hideCurrentSnackBar()
-                ..showSnackBar(SnackBar(
-                  content: Text(state.appsStatsText),
-                  behavior: SnackBarBehavior.floating,
-                  duration: const Duration(seconds: 4),
-                ));
+                ..showSnackBar(
+                  SnackBar(
+                    content: Text(state.appsStatsText),
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 4),
+                  ),
+                );
             },
           ),
           state.scanning
@@ -74,30 +76,31 @@ class AppsScreen extends StatelessWidget {
               child: showUninstalled
                   ? _UninstalledList(state: state)
                   : apps.isEmpty
-                      ? _EmptyView(state: state)
-                      : ListView.builder(
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          keyboardDismissBehavior:
-                              ScrollViewKeyboardDismissBehavior.onDrag,
-                          itemCount: apps.length,
-                          itemBuilder: (context, i) {
-                            final app = apps[i];
-                            return AppListTile(
-                              app: app,
-                              state: state,
-                              onTap: () {
-                                FocusManager.instance.primaryFocus?.unfocus();
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => AppDetailScreen(
-                                        packageName: app.packageName),
-                                  ),
-                                );
-                              },
+                  ? _EmptyView(state: state)
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      itemCount: apps.length,
+                      itemBuilder: (context, i) {
+                        final app = apps[i];
+                        return AppListTile(
+                          app: app,
+                          state: state,
+                          onTap: () {
+                            FocusManager.instance.primaryFocus?.unfocus();
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AppDetailScreen(
+                                  packageName: app.packageName,
+                                ),
+                              ),
                             );
                           },
-                        ),
+                        );
+                      },
+                    ),
             ),
           ),
         ],
@@ -143,8 +146,9 @@ class _SearchBar extends StatefulWidget {
 }
 
 class _SearchBarState extends State<_SearchBar> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.state.query);
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.state.query,
+  );
   final FocusNode _focusNode = FocusNode();
 
   @override
@@ -253,8 +257,13 @@ class _FilterRow extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 4),
               children: [
-                ..._labels.entries.map((e) => Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                ..._labels.entries.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Tooltip(
+                      message: e.key == AppFilter.unorganized
+                          ? '未分组、无原因/备注，且未收藏、未固定到磁贴'
+                          : '',
                       child: FilterChip(
                         label: Text(e.value),
                         selected: state.filter == e.key,
@@ -263,21 +272,25 @@ class _FilterRow extends StatelessWidget {
                           state.refresh();
                         },
                       ),
-                    )),
+                    ),
+                  ),
+                ),
                 if (state.categories.isNotEmpty) ...[
                   const VerticalDivider(width: 12),
-                  ...state.categories.map((c) => Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: FilterChip(
-                          label: Text('${c.emoji} ${c.name}'),
-                          selected: state.filterCategoryId == c.id,
-                          onSelected: (_) {
-                            state.filterCategoryId =
-                                state.filterCategoryId == c.id ? null : c.id;
-                            state.refresh();
-                          },
-                        ),
-                      )),
+                  ...state.categories.map(
+                    (c) => Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: FilterChip(
+                        label: Text('${c.emoji} ${c.name}'),
+                        selected: state.filterCategoryId == c.id,
+                        onSelected: (_) {
+                          state.filterCategoryId =
+                              state.filterCategoryId == c.id ? null : c.id;
+                          state.refresh();
+                        },
+                      ),
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -350,21 +363,31 @@ class _ScopeDropdown extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 16,
-                color: active ? scheme.onPrimaryContainer : scheme.onSurfaceVariant),
+            Icon(
+              icon,
+              size: 16,
+              color: active
+                  ? scheme.onPrimaryContainer
+                  : scheme.onSurfaceVariant,
+            ),
             const SizedBox(width: 4),
-            Text(label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color:
-                      active ? scheme.onPrimaryContainer : scheme.onSurfaceVariant,
-                )),
-            Icon(Icons.arrow_drop_down,
-                size: 18,
-                color:
-                    active ? scheme.onPrimaryContainer : scheme.onSurfaceVariant),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: active
+                    ? scheme.onPrimaryContainer
+                    : scheme.onSurfaceVariant,
+              ),
+            ),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 18,
+              color: active
+                  ? scheme.onPrimaryContainer
+                  : scheme.onSurfaceVariant,
+            ),
           ],
         ),
       ),
@@ -388,8 +411,8 @@ class _EmptyView extends StatelessWidget {
             state.scanError != null
                 ? '扫描失败：${state.scanError}'
                 : state.scanning
-                    ? '正在扫描已安装应用…'
-                    : '没有匹配的应用',
+                ? '正在扫描已安装应用…'
+                : '没有匹配的应用',
             style: TextStyle(color: Colors.grey.shade600),
           ),
         ),

@@ -1320,10 +1320,14 @@ class AppState extends ChangeNotifier {
           if (metaFor(app.packageName).reason.isEmpty) return false;
           break;
         case AppFilter.unorganized:
+          // "Organized" covers anything the user has already invested in from
+          // the launch tab: categories, reasons/notes, favorites and tiles.
           final m = metaFor(app.packageName);
           if (m.categoryIds.isNotEmpty ||
               m.reason.isNotEmpty ||
-              m.note.isNotEmpty) {
+              m.note.isNotEmpty ||
+              m.favorite ||
+              m.pinned) {
             return false;
           }
           break;
