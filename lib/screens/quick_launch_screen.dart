@@ -117,26 +117,14 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
       case 0:
         return [
           IconButton(
-            tooltip: '编辑磁贴（拖动/缩放）',
+            tooltip: '编辑磁贴（添加/拖动/缩放）',
             icon: const Icon(Icons.edit_outlined),
             onPressed: () {
-              final pages = state.tilePages;
-              if (pages.isEmpty ||
-                  state
-                      .tilesOnPage(pages[
-                          state.currentTilePageIndex.clamp(0, pages.length - 1)])
-                      .isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('当前磁贴页还没有应用，进入编辑后点 ➕ 置顶')),
-                );
-                return;
-              }
               state.setTileEditMode(true);
               ScaffoldMessenger.of(context)
                 ..hideCurrentSnackBar()
                 ..showSnackBar(const SnackBar(
-                  content: Text('编辑模式：长按磁贴拖动移动，拖动右下角缩放；完成后点右上角「完成」'),
+                  content: Text('编辑模式：点右上角 ➕ 置顶应用，长按磁贴拖动移动，拖动右下角缩放；完成后点「完成」'),
                   behavior: SnackBarBehavior.floating,
                   duration: Duration(seconds: 4),
                 ));
