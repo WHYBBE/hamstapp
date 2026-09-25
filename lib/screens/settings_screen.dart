@@ -5,6 +5,7 @@ import '../services/native_apps.dart';
 import '../state/app_state.dart';
 import '../utils/backup_actions.dart';
 import '../widgets/floating_nav.dart';
+import '../widgets/theme_color_picker.dart';
 import 'sync_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -24,6 +25,45 @@ class SettingsScreen extends StatelessWidget {
       ),
       body: ListView(
         children: [
+          const _SectionHeader('外观'),
+          ListTile(
+            leading: Icon(_themeModeIcon(state.themeMode)),
+            title: const Text('主题模式'),
+            subtitle: Text(_themeModeLabel(state.themeMode)),
+            trailing: DropdownButton<AppThemeMode>(
+              value: state.themeMode,
+              underline: const SizedBox.shrink(),
+              onChanged: (v) {
+                if (v != null) state.setThemeMode(v);
+              },
+              items: const [
+                DropdownMenuItem(
+                  value: AppThemeMode.system,
+                  child: Text('跟随系统'),
+                ),
+                DropdownMenuItem(
+                  value: AppThemeMode.light,
+                  child: Text('浅色'),
+                ),
+                DropdownMenuItem(value: AppThemeMode.dark, child: Text('深色')),
+              ],
+            ),
+          ),
+          ListTile(
+            leading: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: Color(state.themeColor),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.black12),
+              ),
+            ),
+            title: const Text('主题色'),
+            subtitle: const Text('选择一个预设色，或自定义任意颜色'),
+            onTap: () => showThemeColorPicker(context, state),
+          ),
+          const Divider(height: 1),
           const _SectionHeader('系统'),
           SwitchListTile(
             value: state.showSystemStatusBar,
@@ -139,6 +179,28 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+String _themeModeLabel(AppThemeMode mode) {
+  switch (mode) {
+    case AppThemeMode.system:
+      return '跟随系统深浅色';
+    case AppThemeMode.light:
+      return '始终使用浅色';
+    case AppThemeMode.dark:
+      return '始终使用深色';
+  }
+}
+
+IconData _themeModeIcon(AppThemeMode mode) {
+  switch (mode) {
+    case AppThemeMode.system:
+      return Icons.brightness_auto_outlined;
+    case AppThemeMode.light:
+      return Icons.light_mode_outlined;
+    case AppThemeMode.dark:
+      return Icons.dark_mode_outlined;
   }
 }
 

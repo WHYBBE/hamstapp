@@ -48,6 +48,35 @@ enum CategorySort { manual, name, count }
 /// - [floating]: no persistent bar; a floating button reveals the navigation.
 enum NavMode { auto, bottom, rail, floating }
 
+/// Which color scheme the app follows.
+///
+/// - [system]: match the device light/dark setting.
+/// - [light]: always light.
+/// - [dark]: always dark.
+enum AppThemeMode { system, light, dark }
+
+/// Default seed color for the color scheme (囤囤 orange).
+const int kDefaultThemeColor = 0xFFF0A030;
+
+/// Seed colors offered as quick swatches in the appearance settings. The user
+/// can still pick any color through the custom picker.
+const List<int> kThemeColorPresets = <int>[
+  0xFFF0A030,
+  0xFFE53935,
+  0xFFD81B60,
+  0xFF8E24AA,
+  0xFF5E35B1,
+  0xFF3949AB,
+  0xFF1E88E5,
+  0xFF039BE5,
+  0xFF00897B,
+  0xFF43A047,
+  0xFF7CB342,
+  0xFFFB8C00,
+  0xFF6D4C41,
+  0xFF546E7A,
+];
+
 class AppState extends ChangeNotifier {
   final Storage storage;
 
@@ -1091,6 +1120,32 @@ class AppState extends ChangeNotifier {
     if (pref != NavMode.auto) return pref;
     final isTablet = (width < height ? width : height) >= 600;
     return (isTablet && width > height) ? NavMode.rail : NavMode.bottom;
+  }
+
+  /// Light/dark preference. Defaults to [AppThemeMode.system].
+  AppThemeMode get themeMode {
+    final raw = settings['theme_mode'] as String?;
+    return AppThemeMode.values.firstWhere(
+      (m) => m.name == raw,
+      orElse: () => AppThemeMode.system,
+    );
+  }
+
+  Future<void> setThemeMode(AppThemeMode mode) async {
+    settings['theme_mode'] = mode.name;
+    await _persistSettings();
+    notifyListeners();
+  }
+
+  /// Seed color (ARGB int) used to build the color scheme. Defaults to
+  /// [kDefaultThemeColor].
+  int get themeColor =>
+      (settings['theme_color'] as num?)?.toInt() ?? kDefaultThemeColor;
+
+  Future<void> setThemeColor(int value) async {
+    settings['theme_color'] = value;
+    await _persistSettings();
+    notifyListeners();
   }
 
   // ---------------------------------------------------------------- sync

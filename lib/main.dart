@@ -24,45 +24,66 @@ class HamstappApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<AppState>.value(
       value: state,
-      child: MaterialApp(
-        title: '囤囤',
-        debugShowCheckedModeBanner: false,
-        themeMode: ThemeMode.system,
-        theme: _buildTheme(Brightness.light),
-        darkTheme: _buildTheme(Brightness.dark),
-        home: const HomeScreen(),
-      ),
+      child: const _AppRoot(),
+    );
+  }
+}
+
+class _AppRoot extends StatelessWidget {
+  const _AppRoot();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    return MaterialApp(
+      title: '囤囤',
+      debugShowCheckedModeBanner: false,
+      themeMode: _themeMode(state.themeMode),
+      theme: _buildTheme(Brightness.light, Color(state.themeColor)),
+      darkTheme: _buildTheme(Brightness.dark, Color(state.themeColor)),
+      home: const HomeScreen(),
     );
   }
 
-  ThemeData _buildTheme(Brightness brightness) {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFFF0A030),
-      brightness: brightness,
-    );
-    return ThemeData(
-      useMaterial3: true,
-      colorScheme: scheme,
-      scaffoldBackgroundColor: brightness == Brightness.light
-          ? const Color(0xFFF7F6F3)
-          : null,
-      appBarTheme: AppBarTheme(
-        centerTitle: false,
-        backgroundColor: brightness == Brightness.light
-            ? const Color(0xFFF7F6F3)
-            : scheme.surface,
-        surfaceTintColor: Colors.transparent,
-      ),
-      listTileTheme: const ListTileThemeData(
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: brightness == Brightness.light
-            ? Colors.white
-            : scheme.surface,
-        elevation: 1,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-      ),
-    );
+  ThemeMode _themeMode(AppThemeMode mode) {
+    switch (mode) {
+      case AppThemeMode.system:
+        return ThemeMode.system;
+      case AppThemeMode.light:
+        return ThemeMode.light;
+      case AppThemeMode.dark:
+        return ThemeMode.dark;
+    }
   }
+}
+
+ThemeData _buildTheme(Brightness brightness, Color seed) {
+  final scheme = ColorScheme.fromSeed(
+    seedColor: seed,
+    brightness: brightness,
+  );
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: brightness == Brightness.light
+        ? const Color(0xFFF7F6F3)
+        : null,
+    appBarTheme: AppBarTheme(
+      centerTitle: false,
+      backgroundColor: brightness == Brightness.light
+          ? const Color(0xFFF7F6F3)
+          : scheme.surface,
+      surfaceTintColor: Colors.transparent,
+    ),
+    listTileTheme: const ListTileThemeData(
+      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: brightness == Brightness.light
+          ? Colors.white
+          : scheme.surface,
+      elevation: 1,
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+    ),
+  );
 }

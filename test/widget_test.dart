@@ -381,6 +381,23 @@ void main() {
     expect(state.navMode, NavMode.rail);
   });
 
+  test('theme mode and seed color persist through settings', () async {
+    final state = AppState(_MemStorage());
+    expect(state.themeMode, AppThemeMode.system);
+    expect(state.themeColor, kDefaultThemeColor);
+
+    await state.setThemeMode(AppThemeMode.dark);
+    await state.setThemeColor(kThemeColorPresets[4]);
+    expect(state.themeMode, AppThemeMode.dark);
+    expect(state.themeColor, kThemeColorPresets[4]);
+
+    // Round-trips through a fresh state backed by the same storage.
+    final reopened = AppState(state.storage);
+    await reopened.init();
+    expect(reopened.themeMode, AppThemeMode.dark);
+    expect(reopened.themeColor, kThemeColorPresets[4]);
+  });
+
   test('removing one duplicate keeps the others', () async {
     final state = AppState(_MemStorage());
     state.tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)];
