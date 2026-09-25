@@ -192,44 +192,39 @@ class _TilesTabState extends State<_TilesTab> {
                 _TileBoard(state: state, page: pages[i]),
           ),
         ),
-        Opacity(
-          opacity: state.tileEditMode ? 0.45 : 1,
-          child: AbsorbPointer(
-            absorbing: state.tileEditMode,
-            child: _PageBar(
-              state: state,
-              currentIndex: _index,
-              onSelect: (i) {
-                _setIndex(i);
-                _controller.animateToPage(
-                  i,
-                  duration: const Duration(milliseconds: 240),
-                  curve: Curves.easeOut,
-                );
-              },
-              onAdd: () async {
-                final page = await _promptAddPage(context, state);
-                if (page == null) return;
-                final idx = state.tilePages.indexWhere((p) => p.id == page.id);
-                if (idx < 0) return;
-                _setIndex(idx);
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_controller.hasClients) _controller.jumpToPage(idx);
-                });
-              },
-              onChanged: () {
-                final idx = state.currentTilePageIndex.clamp(
-                    0, state.tilePages.isEmpty ? 0 : state.tilePages.length - 1);
-                setState(() => _index = idx);
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_controller.hasClients &&
-                      (_controller.page?.round() ?? 0) != idx) {
-                    _controller.jumpToPage(idx);
-                  }
-                });
-              },
-            ),
-          ),
+        _PageBar(
+          state: state,
+          currentIndex: _index,
+          editing: state.tileEditMode,
+          onSelect: (i) {
+            _setIndex(i);
+            _controller.animateToPage(
+              i,
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOut,
+            );
+          },
+          onAdd: () async {
+            final page = await _promptAddPage(context, state);
+            if (page == null) return;
+            final idx = state.tilePages.indexWhere((p) => p.id == page.id);
+            if (idx < 0) return;
+            _setIndex(idx);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_controller.hasClients) _controller.jumpToPage(idx);
+            });
+          },
+          onChanged: () {
+            final idx = state.currentTilePageIndex.clamp(
+                0, state.tilePages.isEmpty ? 0 : state.tilePages.length - 1);
+            setState(() => _index = idx);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_controller.hasClients &&
+                  (_controller.page?.round() ?? 0) != idx) {
+                _controller.jumpToPage(idx);
+              }
+            });
+          },
         ),
       ],
     );
@@ -578,10 +573,14 @@ class _CornerGripPainter extends CustomPainter {
 }
 
 /// Bottom page switcher (put at the very bottom, like a tab bar).
+///
+/// Normal mode: compact chips showing only the page name.
+/// Edit mode: larger chips with the tile count, and the "new page" button.
 class _PageBar extends StatelessWidget {
   const _PageBar({
     required this.state,
     required this.currentIndex,
+    required this.editing,
     required this.onSelect,
     required this.onChanged,
     required this.onAdd,
@@ -589,6 +588,7 @@ class _PageBar extends StatelessWidget {
 
   final AppState state;
   final int currentIndex;
+  final bool editing;
   final ValueChanged<int> onSelect;
   final VoidCallback onChanged;
   final VoidCallback onAdd;
@@ -599,74 +599,80 @@ class _PageBar extends StatelessWidget {
     final pages = state.tilePages;
     if (pages.isEmpty) return const SizedBox.shrink();
 
+    final chips = ListView.builder(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      itemCount: pages.length,
+      itemBuilder: (context, i) {
+        final page = pages[i];
+        final selected = i == currentIndex;
+        final count = state.pinCountOnPage(page);
+        final fg = selected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant;
+        return Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: 3,
+            vertical: editing ? 8 : 6,
+          ),
+          child: GestureDetector(
+            onTap: () => onSelect(i),
+            onLongPress: () => _pageMenu(context, state, i, onChanged),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: EdgeInsets.symmetric(horizontal: editing ? 14 : 10),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected
+                    ? scheme.primaryContainer
+                    : scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(editing ? 20 : 14),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    page.name,
+                    style: TextStyle(
+                      fontSize: editing ? 13 : 12,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      color: fg,
+                    ),
+                  ),
+                  if (editing) ...[
+                    const SizedBox(width: 5),
+                    Text(
+                      '$count',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: fg.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
     return Container(
-      height: 54,
+      height: editing ? 54 : 42,
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
       ),
       child: Row(
         children: [
           Expanded(
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              itemCount: pages.length,
-              itemBuilder: (context, i) {
-                final page = pages[i];
-                final selected = i == currentIndex;
-                final count = state.pinCountOnPage(page);
-                final fg = selected
-                    ? scheme.onPrimaryContainer
-                    : scheme.onSurfaceVariant;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                  child: GestureDetector(
-                    onTap: () => onSelect(i),
-                    onLongPress: () => _pageMenu(context, state, i, onChanged),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? scheme.primaryContainer
-                            : scheme.surfaceContainerHighest
-                                .withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            page.name,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight:
-                                  selected ? FontWeight.w700 : FontWeight.w500,
-                              color: fg,
-                            ),
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            '$count',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: fg.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
+            child: editing
+                ? Opacity(opacity: 0.45, child: AbsorbPointer(child: chips))
+                : chips,
+          ),
+          if (editing)
+            IconButton(
+              tooltip: '新建磁贴页',
+              icon: const Icon(Icons.add),
+              onPressed: onAdd,
             ),
-          ),
-          IconButton(
-            tooltip: '新建磁贴页',
-            icon: const Icon(Icons.add),
-            onPressed: onAdd,
-          ),
         ],
       ),
     );
