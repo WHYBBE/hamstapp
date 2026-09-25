@@ -100,9 +100,9 @@ class RemoteSource {
     return '$protocolLabel · $host:$port/$path · $auth';
   }
 
-  /// Arguments passed to the native channel (FTP/SMB only).
+  /// Arguments passed to the native channel (list/download/install).
   Map<String, dynamic> toChannelArgs() => <String, dynamic>{
-        'protocol': isSmb ? 'smb' : 'ftp',
+        'protocol': isSmb ? 'smb' : (isWebdav ? 'webdav' : 'ftp'),
         'host': host.trim(),
         'port': port,
         'path': path.trim(),
@@ -110,6 +110,7 @@ class RemoteSource {
         'password': password,
         'anonymous': anonymous,
         'domain': domain,
+        'secure': secure,
       };
 
   RemoteSource copyWith({

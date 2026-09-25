@@ -11,8 +11,9 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        plugin = PackageScannerPlugin(applicationContext)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler(plugin)
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
+        plugin = PackageScannerPlugin(applicationContext, channel)
+        channel.setMethodCallHandler(plugin)
     }
 
     override fun onDestroy() {

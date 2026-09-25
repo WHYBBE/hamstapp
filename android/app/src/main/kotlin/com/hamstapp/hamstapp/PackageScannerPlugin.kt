@@ -10,9 +10,11 @@ import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.util.Base64
 import androidx.core.content.FileProvider
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -23,12 +25,24 @@ import jcifs.smb.NtlmPasswordAuthenticator
 import jcifs.smb.SmbException
 import jcifs.smb.SmbFile
 import org.apache.commons.net.ftp.FTPClient
-import org.apache.commons.net.ftp.FTPFile
+import org.json.JSONObject
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.Properties
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 /**
  * Native bridge that scans installed packages on a background thread.
@@ -37,7 +51,10 @@ import java.util.concurrent.Executors
  * 1000+ installed packages finishes well within the 30s budget. Icons are
  * fetched lazily (only for rows that are actually rendered) and cached.
  */
-class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodCallHandler {
+class PackageScannerPlugin(
+    private val context: Context,
+    private val channel: MethodChannel
+) : MethodChannel.MethodCallHandler {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val executor = Executors.newFixedThreadPool(4)
@@ -141,6 +158,33 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
                         }
                     }
                 }
+            }
+            "apkInfo" -> {
+                val path = call.argument<String>("path")
+                executor.execute {
+                    val info = runCatching { apkInfoMap(path) }.getOrNull()
+                    mainHandler.post { result.success(info) }
+                }
+            }
+            "cacheIndex" -> {
+                val sourceId = call.argument<String>("sourceId") ?: "default"
+                executor.execute {
+                    val payload = runCatching { cacheIndexPayload(sourceId) }
+                        .getOrElse { emptyMap<String, Any?>() }
+                    mainHandler.post { result.success(payload) }
+                }
+            }
+            "cachePrune" -> {
+                val sourceId = call.argument<String>("sourceId") ?: "default"
+                val entries = call.arguments as? Map<*, *> ?: emptyMap<String, Any?>()
+                executor.execute {
+                    val freed = runCatching { cachePrune(sourceId, entries) }.getOrDefault(0L)
+                    mainHandler.post { result.success(freed) }
+                }
+            }
+            "cacheClear" -> executor.execute {
+                val freed = runCatching { cacheClear() }.getOrDefault(0L)
+                mainHandler.post { result.success(freed) }
             }
             "installApk" -> {
                 val path = call.argument<String>("path")
@@ -410,6 +454,9 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
         // NTLMv2 only, matching what modern Samba/Windows/NAS expect.
         props.setProperty("jcifs.smb.lmCompatibility", "3")
         props.setProperty("jcifs.smb.client.useUnicode", "true")
+        // Bigger socket buffers for faster bulk transfers.
+        props.setProperty("jcifs.smb.client.rcv_buf_size", (1 shl 18).toString())
+        props.setProperty("jcifs.smb.client.snd_buf_size", (1 shl 18).toString())
         if (port != 445) props.setProperty("jcifs.smb.client.port", port.toString())
 
         val base = BaseContext(PropertyConfiguration(props))
@@ -467,32 +514,160 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
         }
     }
 
-    // ------------------------------------------------------------ download/install
+    // ------------------------------------------------------------ download/cache
+
+    private fun longArg(m: Map<*, *>, key: String, def: Long): Long {
+        val v = m[key]
+        return if (v is Number) v.toLong() else def
+    }
+
+    private fun cacheDir(): File {
+        val dir = File(context.filesDir, "apk_cache")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    private fun cacheIndexFile(): File = File(cacheDir(), "index.json")
+
+    private fun loadCache(): JSONObject {
+        val f = cacheIndexFile()
+        if (!f.exists()) return JSONObject()
+        return runCatching { JSONObject(f.readText()) }.getOrDefault(JSONObject())
+    }
+
+    private fun saveCache(obj: JSONObject) {
+        runCatching { cacheIndexFile().writeText(obj.toString()) }
+    }
+
+    private fun cacheKey(sourceId: String, remotePath: String) = "$sourceId::$remotePath"
+
+    private fun safeName(name: String): String {
+        val s = name.replace(Regex("[^A-Za-z0-9._-]"), "_")
+        return s.ifEmpty { "download.apk" }
+    }
 
     /**
-     * Downloads one remote file into the app cache and returns its local path.
-     * `remotePath` is the per-file path produced by the listing.
+     * Downloads one remote file (or reuses a matching cached copy), parses its
+     * APK metadata and records it in the persistent cache index.
      */
     private fun downloadRemoteFile(config: Map<*, *>): String {
+        val sourceId = strArg(config, "sourceId", "default")
         val remotePath = strArg(config, "remotePath")
         require(remotePath.isNotEmpty()) { "缺少远程文件路径" }
         val protocol = strArg(config, "protocol", "ftp").lowercase()
-
         val name = strArg(config, "name").ifEmpty { remotePath.substringAfterLast('/') }
-        val safe = name.replace(Regex("[^A-Za-z0-9._-]"), "_").ifEmpty { "download.apk" }
-        val dir = File(context.cacheDir, "apk_downloads")
-        if (!dir.exists()) dir.mkdirs()
-        val target = File(dir, safe)
+        val rel = strArg(config, "rel", name)
+        val remoteSize = longArg(config, "size", -1L)
+        val remoteModified = longArg(config, "modified", 0L)
+        val key = cacheKey(sourceId, remotePath)
 
-        if (protocol == "smb" || protocol == "samba") {
-            downloadSmb(config, remotePath, target)
-        } else {
-            downloadFtp(config, remotePath, target)
+        val cache = loadCache()
+        val existing = cache.optJSONObject(key)
+        if (existing != null) {
+            val local = File(cacheDir(), existing.optString("file"))
+            val cachedSize = existing.optLong("size", -1L)
+            val same = local.exists() && (remoteSize < 0 || cachedSize == remoteSize)
+            if (same) return local.absolutePath
+            // Remote changed (or file vanished): drop the stale cache entry.
+            local.delete()
+            val oldIcon = existing.optString("icon")
+            if (oldIcon.isNotEmpty()) runCatching { File(cacheDir(), oldIcon).delete() }
+            cache.remove(key)
         }
+
+        val fileName = "${Integer.toHexString(key.hashCode())}_${safeName(name)}"
+        val target = File(cacheDir(), fileName)
+        val downloadId = strArg(config, "downloadId")
+        val onProgress: (Long, Long) -> Unit = { received, total ->
+            reportProgress(downloadId, received, total)
+        }
+        when {
+            protocol == "smb" || protocol == "samba" ->
+                downloadSmb(config, remotePath, target, remoteSize, onProgress)
+            protocol == "webdav" ->
+                downloadWebdav(config, remotePath, target, remoteSize, onProgress)
+            else ->
+                downloadFtp(config, remotePath, target, remoteSize, onProgress)
+        }
+
+        val info = runCatching { apkInfoMap(target.absolutePath) }.getOrNull()
+        var iconName = ""
+        (info?.get("icon") as? ByteArray)?.let { bytes ->
+            iconName = "$fileName.png"
+            runCatching { File(cacheDir(), iconName).writeBytes(bytes) }
+        }
+        val entry = JSONObject().apply {
+            put("file", fileName)
+            put("path", remotePath)
+            put("rel", rel)
+            put("name", name)
+            put("size", target.length())
+            put("modified", remoteModified)
+            put("icon", iconName)
+            if (info != null) {
+                put("packageName", info["packageName"] ?: "")
+                put("appName", info["appName"] ?: "")
+                put("versionName", info["versionName"] ?: "")
+                put("versionCode", info["versionCode"] ?: 0)
+                put("minSdk", info["minSdk"] ?: 0)
+                put("targetSdk", info["targetSdk"] ?: 0)
+            }
+        }
+        cache.put(key, entry)
+        saveCache(cache)
         return target.absolutePath
     }
 
-    private fun downloadFtp(config: Map<*, *>, remotePath: String, target: File) {
+    private fun reportProgress(id: String, received: Long, total: Long) {
+        if (id.isEmpty()) return
+        mainHandler.post {
+            runCatching {
+                channel.invokeMethod(
+                    "downloadProgress",
+                    mapOf("id" to id, "received" to received, "total" to total)
+                )
+            }
+        }
+    }
+
+    /** 64KB buffered copy that reports progress every ~256KB. */
+    private fun copyWithProgress(
+        input: InputStream,
+        output: OutputStream,
+        total: Long,
+        onProgress: (Long, Long) -> Unit
+    ) {
+        val buffer = ByteArray(1 shl 16)
+        var received = 0L
+        var lastReport = 0L
+        val bufferedIn = if (input is BufferedInputStream) input else BufferedInputStream(input, 1 shl 16)
+        val bufferedOut = if (output is BufferedOutputStream) output else BufferedOutputStream(output, 1 shl 16)
+        try {
+            while (true) {
+                val n = bufferedIn.read(buffer)
+                if (n < 0) break
+                bufferedOut.write(buffer, 0, n)
+                received += n
+                if (received - lastReport >= (1 shl 18)) {
+                    lastReport = received
+                    onProgress(received, total)
+                }
+            }
+            bufferedOut.flush()
+        } finally {
+            runCatching { bufferedIn.close() }
+            runCatching { bufferedOut.close() }
+        }
+        onProgress(received, total)
+    }
+
+    private fun downloadFtp(
+        config: Map<*, *>,
+        remotePath: String,
+        target: File,
+        total: Long,
+        onProgress: (Long, Long) -> Unit
+    ) {
         val host = strArg(config, "host")
         val port = intArg(config, "port", 21).let { if (it <= 0) 21 else it }
         val anonymous = boolArg(config, "anonymous")
@@ -502,32 +677,225 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
         val ftp = FTPClient()
         ftp.connectTimeout = 10000
         ftp.defaultTimeout = 20000
+        ftp.bufferSize = 1 shl 16
         try {
             ftp.connect(host, port)
             if (!ftp.login(user, pass)) throw IllegalStateException("FTP 登录失败")
             ftp.enterLocalPassiveMode()
             ftp.setFileType(FTPClient.BINARY_FILE_TYPE)
-            val ok = target.outputStream().use { ftp.retrieveFile(remotePath, it) }
-            if (!ok) throw IllegalStateException("下载失败：$remotePath")
+            val input = ftp.retrieveFileStream(remotePath)
+                ?: throw IllegalStateException("无法读取远程文件：$remotePath")
+            copyWithProgress(input, target.outputStream(), total, onProgress)
+            if (!ftp.completePendingCommand()) {
+                throw IllegalStateException("下载未完成：$remotePath")
+            }
         } finally {
             runCatching { ftp.logout() }
             runCatching { ftp.disconnect() }
         }
     }
 
-    private fun downloadSmb(config: Map<*, *>, remotePath: String, target: File) {
+    private fun downloadSmb(
+        config: Map<*, *>,
+        remotePath: String,
+        target: File,
+        total: Long,
+        onProgress: (Long, Long) -> Unit
+    ) {
         val host = strArg(config, "host")
         val port = intArg(config, "port", 445).let { if (it <= 0) 445 else it }
         val portPart = if (port != 445) ":$port" else ""
         val (base, ctx) = buildSmbContext(config)
         try {
             val remote = SmbFile("smb://$host$portPart/$remotePath", ctx)
-            remote.openInputStream().use { input ->
-                target.outputStream().use { output -> input.copyTo(output) }
-            }
+            val size = if (total >= 0) total else runCatching { remote.length() }.getOrDefault(-1L)
+            copyWithProgress(remote.openInputStream(), target.outputStream(), size, onProgress)
         } finally {
             runCatching { base.close() }
         }
+    }
+
+    private fun downloadWebdav(
+        config: Map<*, *>,
+        remotePath: String,
+        target: File,
+        total: Long,
+        onProgress: (Long, Long) -> Unit
+    ) {
+        val secure = boolArg(config, "secure")
+        val host = strArg(config, "host")
+        val port = intArg(config, "port", if (secure) 443 else 80)
+        val scheme = if (secure) "https" else "http"
+        val path = if (remotePath.startsWith("/")) remotePath else "/$remotePath"
+        val url = URL("$scheme://$host:$port$path")
+        val conn = openConnection(url)
+        try {
+            conn.requestMethod = "GET"
+            conn.connectTimeout = 15000
+            conn.readTimeout = 30000
+            conn.instanceFollowRedirects = true
+            if (!boolArg(config, "anonymous")) {
+                val user = strArg(config, "username")
+                val pass = strArg(config, "password")
+                if (user.isNotEmpty()) {
+                    val token = Base64.encodeToString(
+                        "$user:$pass".toByteArray(Charsets.UTF_8),
+                        Base64.NO_WRAP
+                    )
+                    conn.setRequestProperty("Authorization", "Basic $token")
+                }
+            }
+            val code = conn.responseCode
+            if (code >= 400) throw IllegalStateException("HTTP $code 下载失败：$path")
+            val size = if (total >= 0) total else conn.contentLengthLong
+            copyWithProgress(conn.inputStream, target.outputStream(), size, onProgress)
+        } finally {
+            runCatching { conn.disconnect() }
+        }
+    }
+
+    /** Opens an HTTP(S) connection; HTTPS skips certificate checks (LAN NAS). */
+    private fun openConnection(url: URL): HttpURLConnection {
+        val conn = url.openConnection() as HttpURLConnection
+        if (conn is HttpsURLConnection) {
+            val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
+                override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
+                override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+            })
+            val ctx = SSLContext.getInstance("TLS")
+            ctx.init(null, trustAll, SecureRandom())
+            conn.sslSocketFactory = ctx.socketFactory
+            conn.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
+        }
+        return conn
+    }
+
+    // ------------------------------------------------------------ apk metadata
+
+    /** Parses an APK's manifest (name/package/version/sdk + icon). */
+    private fun apkInfoMap(path: String?): Map<String, Any?>? {
+        if (path.isNullOrEmpty()) return null
+        val file = File(path)
+        if (!file.exists()) return null
+        val pm = context.packageManager
+        val flags = PackageManager.GET_META_DATA
+        val info: PackageInfo = if (Build.VERSION.SDK_INT >= 33) {
+            pm.getPackageArchiveInfo(path, PackageManager.PackageInfoFlags.of(flags.toLong()))
+        } else {
+            @Suppress("DEPRECATION")
+            pm.getPackageArchiveInfo(path, flags)
+        } ?: return null
+        val app = info.applicationInfo ?: return null
+        app.sourceDir = path
+        app.publicSourceDir = path
+        val label = runCatching { app.loadLabel(pm).toString() }.getOrDefault("")
+        val versionCode = if (Build.VERSION.SDK_INT >= 28) {
+            info.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            info.versionCode.toLong()
+        }
+        val icon = runCatching {
+            val drawable = app.loadIcon(pm)
+            val bmp = drawableToBitmap(drawable, 144)
+            val stream = ByteArrayOutputStream()
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            bmp.recycle()
+            stream.toByteArray()
+        }.getOrNull()
+        return mapOf(
+            "packageName" to info.packageName,
+            "appName" to label,
+            "versionName" to (info.versionName ?: ""),
+            "versionCode" to versionCode,
+            "minSdk" to app.minSdkVersion,
+            "targetSdk" to app.targetSdkVersion,
+            "size" to file.length(),
+            "icon" to icon
+        )
+    }
+
+    // ------------------------------------------------------------ cache index
+
+    /** `{entries: [...], totalBytes: n}` for one source. */
+    private fun cacheIndexPayload(sourceId: String): Map<String, Any?> {
+        val cache = loadCache()
+        val entries = ArrayList<Map<String, Any?>>()
+        var total = 0L
+        val prefix = "$sourceId::"
+        val keys = cache.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            if (!key.startsWith(prefix)) continue
+            val obj = cache.optJSONObject(key) ?: continue
+            val file = File(cacheDir(), obj.optString("file"))
+            if (!file.exists()) continue
+            total += file.length()
+            val iconFile = File(cacheDir(), obj.optString("icon"))
+            entries.add(
+                mapOf(
+                    "path" to obj.optString("path"),
+                    "rel" to obj.optString("rel"),
+                    "name" to obj.optString("name"),
+                    "localPath" to file.absolutePath,
+                    "iconPath" to if (iconFile.exists()) iconFile.absolutePath else "",
+                    "size" to file.length(),
+                    "packageName" to obj.optString("packageName"),
+                    "appName" to obj.optString("appName"),
+                    "versionName" to obj.optString("versionName"),
+                    "versionCode" to obj.optLong("versionCode", 0L),
+                    "minSdk" to obj.optInt("minSdk", 0),
+                    "targetSdk" to obj.optInt("targetSdk", 0)
+                )
+            )
+        }
+        return mapOf("entries" to entries, "totalBytes" to total)
+    }
+
+    /**
+     * Deletes cached APKs whose remote file changed (size differs) or no longer
+     * exists, so the next install re-downloads them. Returns freed bytes.
+     */
+    private fun cachePrune(sourceId: String, payload: Map<*, *>): Long {
+        val list = payload["entries"] as? List<*> ?: return 0L
+        val remotes = HashMap<String, Long>()
+        for (item in list) {
+            val m = item as? Map<*, *> ?: continue
+            val p = (m["path"] as? String) ?: continue
+            remotes[p] = longArg(m, "size", -1L)
+        }
+        val cache = loadCache()
+        var freed = 0L
+        val prefix = "$sourceId::"
+        val keys = cache.keys().asSequence().toList()
+        for (key in keys) {
+            if (!key.startsWith(prefix)) continue
+            val remotePath = key.substring(prefix.length)
+            val obj = cache.optJSONObject(key) ?: continue
+            val remote = remotes[remotePath]
+            val fresh = remote != null && (remote < 0 || obj.optLong("size", -1L) == remote)
+            if (fresh) continue
+            val file = File(cacheDir(), obj.optString("file"))
+            if (file.exists() && file.delete()) freed += obj.optLong("size", 0L)
+            val icon = obj.optString("icon")
+            if (icon.isNotEmpty()) runCatching { File(cacheDir(), icon).delete() }
+            cache.remove(key)
+        }
+        saveCache(cache)
+        return freed
+    }
+
+    private fun cacheClear(): Long {
+        var freed = 0L
+        val dir = cacheDir()
+        dir.listFiles()?.forEach { f ->
+            if (f.name == "index.json") return@forEach
+            freed += f.length()
+            f.delete()
+        }
+        runCatching { cacheIndexFile().delete() }
+        return freed
     }
 
     /** Opens the system package installer for a downloaded APK (FileProvider). */

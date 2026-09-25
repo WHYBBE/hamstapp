@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path_provider/path_provider.dart';
-
 import '../models/remote_source.dart';
 import 'native_apps.dart';
 
@@ -31,19 +29,53 @@ class RemoteClient {
     return NativeApps.remoteList(source.toChannelArgs());
   }
 
-  /// Downloads one listed entry and returns the local file path.
+  /// Downloads one listed entry (or reuses the cached copy) and returns the
+  /// local file path. Reports throughput via [onProgress] when provided.
   static Future<String> download(
-      RemoteSource source, Map<String, dynamic> entry) async {
+    RemoteSource source,
+    Map<String, dynamic> entry, {
+    void Function(int received, int total)? onProgress,
+  }) {
     final name = (entry['name'] as String?) ?? 'download.apk';
-    if (source.isWebdav) {
-      return _webdavDownload(source, entry, name);
-    }
     return NativeApps.remoteDownload(
       source.toChannelArgs(),
-      (entry['path'] as String?) ?? '',
-      name,
+      sourceId: source.id,
+      remotePath: (entry['path'] as String?) ?? '',
+      name: name,
+      rel: (entry['rel'] as String?) ?? name,
+      size: (entry['size'] as num?)?.toInt() ?? 0,
+      modified: (entry['modified'] as num?)?.toInt() ?? 0,
+      onProgress: onProgress,
     );
   }
+
+  /// Cached APK metadata for a source, keyed by remote path.
+  static Future<Map<String, Map<String, dynamic>>> cacheIndex(
+      RemoteSource source) async {
+    final r = await NativeApps.cacheIndex(source.id);
+    final entries = (r['entries'] as List?) ?? const [];
+    final out = <String, Map<String, dynamic>>{};
+    for (final e in entries) {
+      final m = (e as Map).cast<String, dynamic>();
+      final p = m['path'] as String? ?? '';
+      if (p.isNotEmpty) out[p] = m;
+    }
+    return out;
+  }
+
+  /// Drops cached APKs whose remote file changed or disappeared.
+  static Future<int> pruneCache(
+      RemoteSource source, List<Map<String, dynamic>> files) {
+    return NativeApps.cachePrune(
+      source.id,
+      files
+          .map((f) => {'path': f['path'], 'size': f['size']})
+          .toList(growable: false),
+    );
+  }
+
+  /// Deletes the whole download cache. Returns freed bytes.
+  static Future<int> clearCache() => NativeApps.cacheClear();
 
   // --------------------------------------------------------------- webdav
 
@@ -168,43 +200,6 @@ class RemoteClient {
       return parseWebdavEntries(utf8.decode(bytes, allowMalformed: true));
     }
     throw HttpException('重定向次数过多', uri: target);
-  }
-
-  static Future<String> _webdavDownload(
-      RemoteSource source, Map<String, dynamic> entry, String name) async {
-    final client = _client();
-    try {
-      final root = _rootUri(source);
-      final path = (entry['path'] as String?) ?? '';
-      final uri = path.isEmpty ? root : root.replace(path: path);
-
-      final req = await client.getUrl(uri);
-      _applyAuth(req, source);
-      final resp = await req.close();
-      if (resp.statusCode >= 400) {
-        await resp.drain<void>();
-        throw HttpException('HTTP ${resp.statusCode}', uri: uri);
-      }
-      final dir = await _downloadDir();
-      final file = File('${dir.path}/${_safeName(name)}');
-      final sink = file.openWrite();
-      await resp.pipe(sink);
-      return file.path;
-    } finally {
-      client.close(force: true);
-    }
-  }
-
-  static Future<Directory> _downloadDir() async {
-    final tmp = await getTemporaryDirectory();
-    final dir = Directory('${tmp.path}/apk_downloads');
-    if (!await dir.exists()) await dir.create(recursive: true);
-    return dir;
-  }
-
-  static String _safeName(String name) {
-    final s = name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
-    return s.isEmpty ? 'download.apk' : s;
   }
 
   static String _hint(int code) {

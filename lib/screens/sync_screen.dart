@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -21,6 +24,9 @@ class SyncScreen extends StatefulWidget {
 
 class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
   TabController? _tabs;
+
+  /// Bumped when the cache is cleared so open tabs reload their cache view.
+  int _cacheEpoch = 0;
 
   @override
   void dispose() {
@@ -81,6 +87,33 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
     if (ok == true) await state.removeSyncSource(source.id);
   }
 
+  Future<void> _confirmClearCache() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清除下载缓存'),
+        content: const Text('删除已缓存的 APK 与信息，下次安装会重新下载。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('清除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final freed = await RemoteClient.clearCache();
+    if (!mounted) return;
+    setState(() => _cacheEpoch++);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('已清除缓存（${Fmt.size(freed)}）')));
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -99,10 +132,13 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
             PopupMenuButton<String>(
               onSelected: (v) {
                 final active = state.remoteSource;
-                if (v == 'edit') {
-                  _openEditor(active);
-                } else if (v == 'delete') {
-                  _confirmDelete(state, active);
+                switch (v) {
+                  case 'edit':
+                    _openEditor(active);
+                  case 'delete':
+                    _confirmDelete(state, active);
+                  case 'clear':
+                    _confirmClearCache();
                 }
               },
               itemBuilder: (_) => const [
@@ -118,6 +154,13 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
                   child: ListTile(
                     leading: Icon(Icons.delete_outline),
                     title: Text('删除当前源'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'clear',
+                  child: ListTile(
+                    leading: Icon(Icons.cleaning_services_outlined),
+                    title: Text('清除下载缓存'),
                   ),
                 ),
               ],
@@ -137,7 +180,11 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
               controller: _controllerFor(state, sources),
               children: [
                 for (final s in sources)
-                  _SyncSourceTab(key: ValueKey(s.id), source: s),
+                  _SyncSourceTab(
+                    key: ValueKey(s.id),
+                    source: s,
+                    reloadToken: _cacheEpoch,
+                  ),
               ],
             ),
     );
@@ -179,8 +226,13 @@ class _EmptySync extends StatelessWidget {
 }
 
 class _SyncSourceTab extends StatefulWidget {
-  const _SyncSourceTab({super.key, required this.source});
+  const _SyncSourceTab({
+    super.key,
+    required this.source,
+    this.reloadToken = 0,
+  });
   final RemoteSource source;
+  final int reloadToken;
 
   @override
   State<_SyncSourceTab> createState() => _SyncSourceTabState();
@@ -189,9 +241,13 @@ class _SyncSourceTab extends StatefulWidget {
 class _SyncSourceTabState extends State<_SyncSourceTab>
     with AutomaticKeepAliveClientMixin {
   List<Map<String, dynamic>> _files = [];
+  Map<String, Map<String, dynamic>> _cache = {};
+  int _cacheBytes = 0;
   bool _loading = true;
   String? _error;
   final Set<String> _installing = {};
+  final Map<String, double?> _progress = {};
+  final Map<String, Uint8List?> _icons = {};
 
   @override
   bool get wantKeepAlive => true;
@@ -206,7 +262,9 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
   void didUpdateWidget(covariant _SyncSourceTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.source.id != widget.source.id ||
-        oldWidget.source.summary != widget.source.summary) {
+        oldWidget.source.summary != widget.source.summary ||
+        oldWidget.reloadToken != widget.reloadToken) {
+      _icons.clear();
       _load();
     }
   }
@@ -218,9 +276,19 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
     });
     try {
       final files = await RemoteClient.list(widget.source);
+      // Drop cached copies whose remote file changed or disappeared.
+      try {
+        await RemoteClient.pruneCache(widget.source, files);
+      } catch (_) {}
+      final cache = await RemoteClient.cacheIndex(widget.source);
       if (!mounted) return;
       setState(() {
         _files = files;
+        _cache = cache;
+        _cacheBytes = cache.values.fold(
+          0,
+          (sum, e) => sum + ((e['size'] as num?)?.toInt() ?? 0),
+        );
         _loading = false;
       });
     } catch (e) {
@@ -241,16 +309,96 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
 
   Future<void> _install(Map<String, dynamic> f) async {
     final key = (f['path'] as String?) ?? (f['name'] as String? ?? '');
-    setState(() => _installing.add(key));
+    setState(() {
+      _installing.add(key);
+      _progress[key] = 0;
+    });
     try {
-      final local = await RemoteClient.download(widget.source, f);
+      final local = await RemoteClient.download(
+        widget.source,
+        f,
+        onProgress: (received, total) {
+          if (!mounted || !_installing.contains(key)) return;
+          setState(() {
+            _progress[key] =
+                total > 0 ? (received / total).clamp(0.0, 1.0) : null;
+          });
+        },
+      );
+      // Refresh this entry's metadata/icon from the (now populated) cache.
+      await _refreshCache();
       final ok = await NativeApps.installApk(local);
       if (!ok) throw StateError('无法调起系统安装器');
       _snack('已交给系统安装器：${f['name']}');
     } catch (e) {
       _snack('安装失败：$e');
     } finally {
-      if (mounted) setState(() => _installing.remove(key));
+      if (mounted) {
+        setState(() {
+          _installing.remove(key);
+          _progress.remove(key);
+        });
+      }
+    }
+  }
+
+  /// Downloads and parses an APK (without installing) so its full metadata
+  /// and icon become visible in the list.
+  Future<void> _fetchInfo(Map<String, dynamic> f) async {
+    final key = (f['path'] as String?) ?? (f['name'] as String? ?? '');
+    if (_installing.contains(key)) return;
+    setState(() {
+      _installing.add(key);
+      _progress[key] = 0;
+    });
+    try {
+      await RemoteClient.download(
+        widget.source,
+        f,
+        onProgress: (received, total) {
+          if (!mounted || !_installing.contains(key)) return;
+          setState(() {
+            _progress[key] =
+                total > 0 ? (received / total).clamp(0.0, 1.0) : null;
+          });
+        },
+      );
+      await _refreshCache();
+      _snack('已获取 APK 信息');
+    } catch (e) {
+      _snack('获取信息失败：$e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _installing.remove(key);
+          _progress.remove(key);
+        });
+      }
+    }
+  }
+
+  Future<void> _refreshCache() async {
+    final cache = await RemoteClient.cacheIndex(widget.source);
+    if (!mounted) return;
+    setState(() {
+      _cache = cache;
+      _cacheBytes = cache.values.fold(
+        0,
+        (sum, e) => sum + ((e['size'] as num?)?.toInt() ?? 0),
+      );
+    });
+  }
+
+  Future<Uint8List?> _iconFor(String? path) async {
+    if (path == null || path.isEmpty) return null;
+    if (_icons.containsKey(path)) return _icons[path];
+    try {
+      final bytes = await File(path).readAsBytes();
+      _icons[path] = bytes;
+      return bytes;
+    } catch (_) {
+      _icons[path] = null;
+      return null;
     }
   }
 
@@ -258,6 +406,9 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
   Widget build(BuildContext context) {
     super.build(context);
     final state = context.watch<AppState>();
+    final byPkg = {
+      for (final a in state.apps) a.packageName: a,
+    };
 
     if (_loading && _files.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -286,42 +437,181 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, i) {
           if (i == 0) {
-            return _SourceHeader(source: widget.source, count: _files.length);
+            return _SourceHeader(
+              source: widget.source,
+              count: _files.length,
+              cacheBytes: _cacheBytes,
+            );
           }
           final f = _files[i - 1];
-          final name = f['name'] as String? ?? '';
-          final rel = (f['rel'] as String?) ?? name;
-          final size = (f['size'] as num?)?.toInt() ?? 0;
-          final hit = _matchInstalled(state.apps, name);
-          final key = (f['path'] as String?) ?? name;
-          final installing = _installing.contains(key);
-          return ListTile(
-            leading: hit != null
-                ? AppIcon(packageName: hit.packageName, label: hit.appName)
-                : const CircleAvatar(child: Icon(Icons.android)),
-            title: Text(rel == name ? name : rel),
-            subtitle: Text([
-              Fmt.size(size),
-              if (hit != null)
-                '已安装：${hit.appName}'
-                    '${hit.versionName.isEmpty ? '' : ' v${hit.versionName}'}',
-            ].join(' · ')),
-            trailing: installing
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : IconButton(
-                    tooltip: hit == null ? '安装' : '更新',
-                    icon: const Icon(Icons.download_for_offline_outlined),
-                    onPressed: () => _install(f),
-                  ),
-            onTap: installing ? null : () => _install(f),
-          );
+          return _buildItem(state, byPkg, f);
         },
       ),
     );
+  }
+
+  Widget _buildItem(
+    AppState state,
+    Map<String, AppInfo> byPkg,
+    Map<String, dynamic> f,
+  ) {
+    final name = f['name'] as String? ?? '';
+    final rel = (f['rel'] as String?) ?? name;
+    final remoteSize = (f['size'] as num?)?.toInt() ?? 0;
+    final remoteModified = (f['modified'] as num?)?.toInt() ?? 0;
+    final key = (f['path'] as String?) ?? name;
+    final meta = _cache[key];
+    final installing = _installing.contains(key);
+    final progress = _progress[key];
+
+    // Package identity: prefer parsed APK metadata, fall back to filename.
+    final pkg = (meta?['packageName'] as String?)?.trim() ?? '';
+    final installed = pkg.isNotEmpty
+        ? byPkg[pkg]
+        : _matchInstalled(state.apps, name);
+
+    final apkName = (meta?['appName'] as String?)?.trim() ?? '';
+    final apkVersion = (meta?['versionName'] as String?)?.trim() ?? '';
+    final apkVersionCode = (meta?['versionCode'] as num?)?.toInt() ?? 0;
+    final minSdk = (meta?['minSdk'] as num?)?.toInt() ?? 0;
+    final size = (meta?['size'] as num?)?.toInt() ?? remoteSize;
+
+    final (status, statusColor) =
+        _status(state, meta, installed, apkVersionCode, pkg.isNotEmpty);
+
+    final title = rel == name ? name : rel;
+    final subtitleLines = <String>[
+      if (apkName.isNotEmpty) 'APK：$apkName',
+      '${Fmt.size(size)}'
+          '${remoteModified > 0 ? ' · ${Fmt.relative(remoteModified)}' : ''}',
+      if (pkg.isNotEmpty) '包名：$pkg',
+      if (apkVersion.isNotEmpty) '版本：$apkVersion${apkVersionCode > 0 ? ' ($apkVersionCode)' : ''}',
+      if (installed != null)
+        '已安装：${installed.appName} v${installed.versionName}',
+      if (minSdk > 0) 'minSdk $minSdk',
+    ];
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ListTile(
+          leading: _leading(f, meta, installed, apkName),
+          title: Text(title),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              subtitleLines.join('\n'),
+              style: const TextStyle(height: 1.4),
+            ),
+          ),
+          isThreeLine: subtitleLines.length > 2,
+          trailing: installing
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : IconButton(
+                  tooltip: installed == null ? '安装' : '更新',
+                  icon: const Icon(Icons.download_for_offline_outlined),
+                  onPressed: () => _install(f),
+                ),
+          onTap: installing ? null : () => _install(f),
+          onLongPress: installing ? null : () => _fetchInfo(f),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+              if (meta != null) ...[
+                const SizedBox(width: 8),
+                Text(
+                  '已缓存',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (installing && progress != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 3,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _leading(
+    Map<String, dynamic> f,
+    Map<String, dynamic>? meta,
+    AppInfo? installed,
+    String apkName,
+  ) {
+    if (installed != null) {
+      return AppIcon(packageName: installed.packageName, label: installed.appName);
+    }
+    final iconPath = meta?['iconPath'] as String?;
+    if (iconPath != null && iconPath.isNotEmpty) {
+      return FutureBuilder<Uint8List?>(
+        future: _iconFor(iconPath),
+        builder: (context, snap) => AppIcon(
+          packageName: (meta?['packageName'] as String?) ?? '',
+          label: apkName,
+          bytes: snap.data,
+        ),
+      );
+    }
+    return const CircleAvatar(child: Icon(Icons.android));
+  }
+
+  /// Returns (label, color) describing the action for this APK.
+  (String, Color) _status(
+    AppState state,
+    Map<String, dynamic>? meta,
+    AppInfo? installed,
+    int apkVersionCode,
+    bool identityKnown,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    if (installed == null) {
+      return identityKnown
+          ? ('新安装', scheme.primary)
+          : ('新安装（未匹配）', scheme.primary);
+    }
+    if (!identityKnown || apkVersionCode <= 0) {
+      return ('更新（版本未知）', Colors.orange);
+    }
+    final currentCode = installed.versionCode;
+    if (apkVersionCode > currentCode) {
+      return ('可更新 v${installed.versionName} → $apkVersionCode', Colors.green);
+    }
+    if (apkVersionCode == currentCode) {
+      return ('已是最新 (${installed.versionName})', scheme.onSurfaceVariant);
+    }
+    return ('已安装更高版本 (${installed.versionName})', Colors.redAccent);
   }
 
   static AppInfo? _matchInstalled(List<AppInfo> apps, String fileName) {
@@ -335,9 +625,14 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
 }
 
 class _SourceHeader extends StatelessWidget {
-  const _SourceHeader({required this.source, required this.count});
+  const _SourceHeader({
+    required this.source,
+    required this.count,
+    required this.cacheBytes,
+  });
   final RemoteSource source;
   final int count;
+  final int cacheBytes;
 
   @override
   Widget build(BuildContext context) {
@@ -348,7 +643,8 @@ class _SourceHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '发现 $count 个 APK',
+            '发现 $count 个 APK'
+            '${cacheBytes > 0 ? ' · 缓存 ${Fmt.size(cacheBytes)}' : ''}',
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
@@ -356,6 +652,14 @@ class _SourceHeader extends StatelessWidget {
             source.summary,
             style: TextStyle(
               fontSize: 12,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '点击安装，长按可先下载解析 APK 信息（名称/版本/包名）',
+            style: TextStyle(
+              fontSize: 11,
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),

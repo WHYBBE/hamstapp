@@ -8,6 +8,27 @@ class NativeApps {
 
   NativeApps._();
 
+  static final Map<String, void Function(int received, int total)>
+      _downloadProgress = {};
+  static bool _progressHandlerSet = false;
+
+  static void _ensureProgressHandler() {
+    if (_progressHandlerSet) return;
+    _progressHandlerSet = true;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'downloadProgress') {
+        final m = (call.arguments as Map).cast<dynamic, dynamic>();
+        final id = m['id'] as String?;
+        final cb = id == null ? null : _downloadProgress[id];
+        if (cb != null) {
+          cb((m['received'] as num?)?.toInt() ?? 0,
+              (m['total'] as num?)?.toInt() ?? -1);
+        }
+      }
+      return null;
+    });
+  }
+
   static Future<List<AppInfo>> getInstalledApps({bool includeSystem = true}) async {
     final raw = await _channel.invokeMethod<List<dynamic>>(
       'getInstalledApps',
@@ -75,18 +96,73 @@ class NativeApps {
         .toList(growable: false);
   }
 
-  /// Downloads a remote file into the app cache; returns the local path.
+  /// Downloads a remote file into the persistent cache; returns the local path.
+  ///
+  /// A cached copy with the same size is reused. When [onProgress] is given the
+  /// native side reports throughput on the shared channel.
   static Future<String> remoteDownload(
-      Map<String, dynamic> config, String remotePath, String name) async {
-    final path = await _channel.invokeMethod<String>('remoteDownload', {
-      ...config,
-      'remotePath': remotePath,
-      'name': name,
-    });
-    if (path == null || path.isEmpty) {
-      throw StateError('下载失败');
+    Map<String, dynamic> config, {
+    required String sourceId,
+    required String remotePath,
+    required String name,
+    required String rel,
+    required int size,
+    required int modified,
+    void Function(int received, int total)? onProgress,
+  }) async {
+    _ensureProgressHandler();
+    final id = 'dl_${DateTime.now().microsecondsSinceEpoch}';
+    if (onProgress != null) _downloadProgress[id] = onProgress;
+    try {
+      final path = await _channel.invokeMethod<String>('remoteDownload', {
+        ...config,
+        'sourceId': sourceId,
+        'remotePath': remotePath,
+        'name': name,
+        'rel': rel,
+        'size': size,
+        'modified': modified,
+        'downloadId': id,
+      });
+      if (path == null || path.isEmpty) throw StateError('下载失败');
+      return path;
+    } finally {
+      _downloadProgress.remove(id);
     }
-    return path;
+  }
+
+  /// Reads name/package/version/sdk + icon from a downloaded APK.
+  static Future<Map<String, dynamic>?> apkInfo(String path) async {
+    final r = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+      'apkInfo',
+      {'path': path},
+    );
+    return r?.cast<String, dynamic>();
+  }
+
+  /// Cache index for one source: `{entries: [...], totalBytes: n}`.
+  static Future<Map<String, dynamic>> cacheIndex(String sourceId) async {
+    final r = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+      'cacheIndex',
+      {'sourceId': sourceId},
+    );
+    return (r ?? const {}).cast<String, dynamic>();
+  }
+
+  /// Drops cached APKs whose remote file changed or disappeared. Returns freed bytes.
+  static Future<int> cachePrune(
+      String sourceId, List<Map<String, dynamic>> entries) async {
+    final freed = await _channel.invokeMethod<num>('cachePrune', {
+      'sourceId': sourceId,
+      'entries': entries,
+    });
+    return freed?.toInt() ?? 0;
+  }
+
+  /// Deletes the whole download cache. Returns freed bytes.
+  static Future<int> cacheClear() async {
+    final freed = await _channel.invokeMethod<num>('cacheClear');
+    return freed?.toInt() ?? 0;
   }
 
   /// Hands a downloaded APK to the system package installer.

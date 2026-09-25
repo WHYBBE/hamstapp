@@ -11,11 +11,16 @@ class AppIcon extends StatefulWidget {
     required this.packageName,
     required this.label,
     this.size = 44,
+    this.bytes,
   });
 
   final String packageName;
   final String label;
   final double size;
+
+  /// Pre-decoded icon bytes (e.g. read from a downloaded APK). When set the
+  /// icon is not fetched from the native side.
+  final Uint8List? bytes;
 
   static final Map<String, Uint8List?> _cache = {};
 
@@ -38,7 +43,8 @@ class _AppIconState extends State<AppIcon> {
   @override
   void didUpdateWidget(covariant AppIcon oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.packageName != widget.packageName) {
+    if (oldWidget.packageName != widget.packageName ||
+        oldWidget.bytes != widget.bytes) {
       _bytes = null;
       _loading = true;
       _load();
@@ -46,6 +52,13 @@ class _AppIconState extends State<AppIcon> {
   }
 
   Future<void> _load() async {
+    if (widget.bytes != null) {
+      setState(() {
+        _bytes = widget.bytes;
+        _loading = false;
+      });
+      return;
+    }
     final cached = AppIcon._cache[widget.packageName];
     if (cached != null) {
       if (!mounted) return;
