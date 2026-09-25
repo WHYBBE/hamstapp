@@ -30,6 +30,9 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
       if (!_tabs.indexIsChanging) setState(() {});
     });
 
+  RecentSort _recentSort = RecentSort.recent;
+  int _recentSince = 0;
+
   @override
   void dispose() {
     _tabs.dispose();
@@ -78,15 +81,26 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
           _TilesTab(state: state),
           CategoriesTab(state: state),
           _FavoritesTab(state: state),
-          _RecentTab(state: state),
+          _RecentTab(
+            state: state,
+            sort: _recentSort,
+            sinceMillis: _recentSince,
+          ),
         ],
       ),
     );
   }
 
+  /// Exactly one action in normal mode per section, so the header tabs keep a
+  /// constant width (the tile "+" only appears while editing).
   List<Widget> _actions(BuildContext context, AppState state, bool editing) {
     if (_tabs.index == 0 && editing) {
       return [
+        IconButton(
+          tooltip: '置顶应用到磁贴',
+          icon: const Icon(Icons.add),
+          onPressed: () => showPinSheet(context, state),
+        ),
         TextButton.icon(
           onPressed: () => state.setTileEditMode(false),
           icon: const Icon(Icons.check, size: 18),
@@ -103,9 +117,14 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
             icon: const Icon(Icons.edit_outlined),
             onPressed: () {
               final pages = state.tilePages;
-              if (pages.isEmpty || state.tilesOnPage(pages[state.currentTilePageIndex.clamp(0, pages.length - 1)]).isEmpty) {
+              if (pages.isEmpty ||
+                  state
+                      .tilesOnPage(pages[
+                          state.currentTilePageIndex.clamp(0, pages.length - 1)])
+                      .isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('当前磁贴页还没有应用，先点击 ➕ 置顶')),
+                  const SnackBar(
+                      content: Text('当前磁贴页还没有应用，进入编辑后点 ➕ 置顶')),
                 );
                 return;
               }
@@ -119,11 +138,6 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
                 ));
             },
           ),
-          IconButton(
-            tooltip: '置顶应用到磁贴',
-            icon: const Icon(Icons.add),
-            onPressed: () => showPinSheet(context, state),
-          ),
         ];
       case 1:
         return [
@@ -133,9 +147,102 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
             onPressed: () => showCategoryEditor(context, state, null),
           ),
         ];
+      case 2:
+        return [
+          IconButton(
+            tooltip: '添加收藏',
+            icon: const Icon(Icons.add),
+            onPressed: () => showFavoriteSheet(context, state),
+          ),
+        ];
       default:
-        return const [];
+        return [
+          IconButton(
+            tooltip: '排序 / 时间筛选',
+            icon: const Icon(Icons.tune),
+            onPressed: () => _showRecentFilterSheet(context),
+          ),
+        ];
     }
+  }
+
+  Future<void> _showRecentFilterSheet(BuildContext context) async {
+    final ranges = _recentRanges();
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: StatefulBuilder(
+          builder: (ctx, setLocal) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Text('最近 · 排序与筛选',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+              ListTile(
+                leading: const Icon(Icons.schedule),
+                title: const Text('按时间排序'),
+                trailing: _recentSort == RecentSort.recent
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () {
+                  setState(() => _recentSort = RecentSort.recent);
+                  setLocal(() {});
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.bar_chart),
+                title: const Text('按频次排序'),
+                trailing: _recentSort == RecentSort.frequent
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () {
+                  setState(() => _recentSort = RecentSort.frequent);
+                  setLocal(() {});
+                },
+              ),
+              const Divider(height: 1),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Text('时间段', style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final r in ranges)
+                      ChoiceChip(
+                        label: Text(r.$1),
+                        selected: _recentSince == r.$2,
+                        onSelected: (_) {
+                          setState(() => _recentSince = r.$2);
+                          setLocal(() {});
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<(String, int)> _recentRanges() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return [
+      ('全部', 0),
+      ('今天', today.millisecondsSinceEpoch),
+      ('近 7 天', today.subtract(const Duration(days: 6)).millisecondsSinceEpoch),
+      ('近 30 天',
+          today.subtract(const Duration(days: 29)).millisecondsSinceEpoch),
+    ];
   }
 }
 
@@ -1030,84 +1137,93 @@ class _Tile extends StatelessWidget {
 
 // ---------------------------------------------------------------- 收藏
 
-class _FavoritesTab extends StatefulWidget {
+/// Searchable sheet used to add/remove favorites (like the pin sheet).
+void showFavoriteSheet(BuildContext context, AppState state) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) {
+      var query = '';
+      return StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final apps = AppSearch.rank(state.apps, query, limit: 150);
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.8,
+            builder: (ctx, scrollController) => Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('添加收藏',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: TextField(
+                    autofocus: true,
+                    onChanged: (v) => setLocal(() => query = v),
+                    decoration: InputDecoration(
+                      hintText: '搜索应用',
+                      prefixIcon: const Icon(Icons.search),
+                      filled: true,
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    itemCount: apps.length,
+                    itemBuilder: (context, i) {
+                      final app = apps[i];
+                      final fav = state.metaFor(app.packageName).favorite;
+                      return ListTile(
+                        leading: AppIcon(
+                            packageName: app.packageName, label: app.appName),
+                        title: Text(app.appName),
+                        subtitle: Text(app.packageName,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        trailing: Icon(
+                          fav ? Icons.star_rounded : Icons.star_border_rounded,
+                          color: fav ? Colors.orange : Colors.grey,
+                        ),
+                        onTap: () {
+                          state.updateMeta(app.packageName, favorite: !fav);
+                          setLocal(() {});
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+class _FavoritesTab extends StatelessWidget {
   const _FavoritesTab({required this.state});
   final AppState state;
 
   @override
-  State<_FavoritesTab> createState() => _FavoritesTabState();
-}
-
-class _FavoritesTabState extends State<_FavoritesTab> {
-  String _query = '';
-
-  @override
   Widget build(BuildContext context) {
-    final state = widget.state;
     final favorites = state.favorites;
-
-    final results = _query.trim().isEmpty
-        ? <AppInfo>[]
-        : AppSearch.rank(state.apps, _query, limit: 12);
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: TextField(
-            onChanged: (v) => setState(() => _query = v),
-            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-            onSubmitted: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-            decoration: InputDecoration(
-              hintText: '搜索任意应用并立即启动',
-              prefixIcon: const Icon(Icons.search),
-              isDense: true,
-              filled: true,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-        ),
-        if (_query.trim().isNotEmpty)
-          Expanded(child: _resultList(state, results))
-        else
-          Expanded(child: _favoritesGrid(state, favorites)),
-      ],
-    );
-  }
-
-  Widget _resultList(AppState state, List<AppInfo> results) {
-    if (results.isEmpty) {
-      return const Center(child: Text('没有找到匹配的应用'));
-    }
-    return ListView.builder(
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      itemCount: results.length,
-      itemBuilder: (context, i) {
-        final app = results[i];
-        return ListTile(
-          leading: AppIcon(packageName: app.packageName, label: app.appName),
-          title: Text(app.appName),
-          subtitle:
-              Text(app.packageName, maxLines: 1, overflow: TextOverflow.ellipsis),
-          trailing: const Icon(Icons.rocket_launch_outlined),
-          onTap: () {
-            FocusManager.instance.primaryFocus?.unfocus();
-            launchApp(context, app.packageName);
-          },
-        );
-      },
-    );
-  }
-
-  Widget _favoritesGrid(AppState state, List<AppInfo> favorites) {
     if (favorites.isEmpty) {
       return _hint(
         context,
         icon: Icons.star_outline,
-        text: '还没有收藏的应用\n在应用列表点击 ⭐ 收藏，即可在这里一键启动',
+        text: '还没有收藏的应用\n点击右上角 ➕ 添加，即可在这里一键启动',
       );
     }
     return GridView.builder(
@@ -1152,17 +1268,25 @@ class _FavoritesTabState extends State<_FavoritesTab> {
 // ---------------------------------------------------------------- 最近
 
 class _RecentTab extends StatelessWidget {
-  const _RecentTab({required this.state});
+  const _RecentTab({
+    required this.state,
+    required this.sort,
+    required this.sinceMillis,
+  });
   final AppState state;
+  final RecentSort sort;
+  final int sinceMillis;
 
   @override
   Widget build(BuildContext context) {
-    final apps = state.recentApps;
+    final apps = state.recentAppsBy(sort, sinceMillis: sinceMillis);
     if (apps.isEmpty) {
       return _hint(
         context,
         icon: Icons.history,
-        text: '还没有启动记录\n从囤囤里启动应用后会出现在这里',
+        text: sinceMillis > 0
+            ? '该时间段内没有启动记录\n可在右上角调整时间段'
+            : '还没有启动记录\n从囤囤里启动应用后会出现在这里',
       );
     }
     return ListView.builder(
@@ -1173,7 +1297,9 @@ class _RecentTab extends StatelessWidget {
         return ListTile(
           leading: AppIcon(packageName: app.packageName, label: app.appName),
           title: Text(app.appName),
-          subtitle: Text('上次启动 ${Fmt.relative(meta.lastLaunchedAt)}'),
+          subtitle: Text(
+            '启动 ${meta.launchCount} 次 · 上次 ${Fmt.relative(meta.lastLaunchedAt)}',
+          ),
           trailing: const Icon(Icons.rocket_launch_outlined, size: 20),
           onTap: () => launchApp(context, app.packageName),
           onLongPress: () => Navigator.push(

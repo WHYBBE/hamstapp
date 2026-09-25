@@ -20,6 +20,9 @@ class AppMeta {
   /// Last time the app was launched from this app; 0 means never.
   int lastLaunchedAt;
 
+  /// How many times the app was launched from this app.
+  int launchCount;
+
   /// Which tile page this pinned app lives on ('' = default/first page).
   String tilePageId;
 
@@ -41,6 +44,7 @@ class AppMeta {
     this.uninstallReason = '',
     this.uninstalledAt = 0,
     this.lastLaunchedAt = 0,
+    this.launchCount = 0,
     this.tilePageId = '',
     this.tileCol = -1,
     this.tileRow = -1,
@@ -62,6 +66,7 @@ class AppMeta {
         uninstallReason: map['uninstallReason'] as String? ?? '',
         uninstalledAt: map['uninstalledAt'] as int? ?? 0,
         lastLaunchedAt: map['lastLaunchedAt'] as int? ?? 0,
+        launchCount: map['launchCount'] as int? ?? 0,
         tilePageId: map['tilePageId'] as String? ?? '',
         tileCol: map['tileCol'] as int? ?? -1,
         tileRow: map['tileRow'] as int? ?? -1,
@@ -81,6 +86,7 @@ class AppMeta {
         'uninstallReason': uninstallReason,
         'uninstalledAt': uninstalledAt,
         'lastLaunchedAt': lastLaunchedAt,
+        'launchCount': launchCount,
         'tilePageId': tilePageId,
         'tileCol': tileCol,
         'tileRow': tileRow,

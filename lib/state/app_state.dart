@@ -33,6 +33,9 @@ enum AppFilter {
 
 enum AppSort { name, installTime, updateTime, size }
 
+/// Ordering for the "recent" quick-launch tab.
+enum RecentSort { recent, frequent }
+
 class AppState extends ChangeNotifier {
   final Storage storage;
 
@@ -1279,19 +1282,38 @@ class AppState extends ChangeNotifier {
         a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
 
   /// Apps launched from this app, most recent first.
-  List<AppInfo> get recentApps {
-    final list = apps
-        .where((a) => metaFor(a.packageName).lastLaunchedAt > 0)
-        .toList()
-      ..sort((a, b) => metaFor(b.packageName)
-          .lastLaunchedAt
-          .compareTo(metaFor(a.packageName).lastLaunchedAt));
+  List<AppInfo> get recentApps => recentAppsBy(RecentSort.recent);
+
+  /// Apps launched from this app, optionally filtered to launches at/after
+  /// [sinceMillis] and sorted by recency or launch frequency.
+  List<AppInfo> recentAppsBy(RecentSort sort, {int sinceMillis = 0}) {
+    final list = apps.where((a) {
+      final m = metaFor(a.packageName);
+      if (m.lastLaunchedAt <= 0) return false;
+      if (sinceMillis > 0 && m.lastLaunchedAt < sinceMillis) return false;
+      return true;
+    }).toList();
+
+    int lastAt(String pkg) => metaFor(pkg).lastLaunchedAt;
+    int count(String pkg) => metaFor(pkg).launchCount;
+
+    switch (sort) {
+      case RecentSort.recent:
+        list.sort((a, b) => lastAt(b.packageName).compareTo(lastAt(a.packageName)));
+      case RecentSort.frequent:
+        list.sort((a, b) {
+          final c = count(b.packageName).compareTo(count(a.packageName));
+          if (c != 0) return c;
+          return lastAt(b.packageName).compareTo(lastAt(a.packageName));
+        });
+    }
     return list;
   }
 
   Future<void> markLaunched(String packageName) async {
     final m = metaFor(packageName);
     m.lastLaunchedAt = DateTime.now().millisecondsSinceEpoch;
+    m.launchCount += 1;
     await _persistMeta();
     notifyListeners();
   }

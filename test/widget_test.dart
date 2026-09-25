@@ -593,6 +593,25 @@ void main() {
     expect(after.single.$1.id, 'p2');
   });
 
+  test('recent apps track launch count and can sort by frequency', () async {
+    final state = AppState(_MemStorage());
+    state.apps = [_ai('com.a', 'A'), _ai('com.b', 'B')];
+    await state.markLaunched('com.a');
+    await state.markLaunched('com.b');
+    await state.markLaunched('com.b');
+
+    expect(state.metaFor('com.b').launchCount, 2);
+    expect(state.recentAppsBy(RecentSort.recent).length, 2);
+    // Frequency ordering is deterministic (2 launches vs 1).
+    expect(state.recentAppsBy(RecentSort.frequent).first.packageName, 'com.b');
+
+    final none = state.recentAppsBy(
+      RecentSort.recent,
+      sinceMillis: DateTime.now().millisecondsSinceEpoch + 1000,
+    );
+    expect(none, isEmpty);
+  });
+
   test('legacy single remote source migrates to a sync source', () async {
     final storage = _MemStorage();
     storage._data['settings'] = {
