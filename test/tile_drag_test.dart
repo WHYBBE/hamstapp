@@ -127,4 +127,43 @@ void main() {
     expect(state.tiles.length, 1);
     expect(state.tiles.first.pageId, 'p1');
   });
+
+  testWidgets('wide board keeps a far-right tile instead of re-packing it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(_MemStorage())
+      ..initialized = true
+      ..apps = [_ai('com.a', 'A')]
+      ..tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)]
+      ..tiles = [
+        Tile(
+          id: 't1',
+          packageName: 'com.a',
+          pageId: 'p1',
+          col: 10,
+          row: 0,
+          w: 2,
+          h: 2,
+        ),
+      ]
+      ..currentTilePageIndex = 0;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: state,
+        child: const MaterialApp(home: QuickLaunchScreen()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // Column 10 only fits because the wide screen exposes more than 6 columns;
+    // on a phone it would have been re-packed to the left.
+    final tile = find.byKey(const ValueKey('t1'));
+    expect(tile, findsOneWidget);
+    expect(tester.getRect(tile).left, greaterThan(400));
+  });
 }
