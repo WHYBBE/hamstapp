@@ -567,6 +567,32 @@ void main() {
     expect(await state.removeOneTileOnCurrentPage('com.x'), isFalse);
   });
 
+  test('pin locations list every page with counts', () async {
+    final state = AppState(_MemStorage());
+    state.tilePages = [
+      TilePage(id: 'p1', name: 'P1', createdAt: 0),
+      TilePage(id: 'p2', name: 'P2', createdAt: 0),
+    ];
+    state.apps = [_ai('com.x', 'X')];
+    state.currentTilePageIndex = 0;
+
+    await state.addTile('com.x', pageId: 'p1');
+    await state.addTile('com.x', pageId: 'p1');
+    await state.addTile('com.x', pageId: 'p2');
+
+    final locs = state.pinLocationsFor('com.x');
+    expect(locs.length, 2);
+    expect(locs[0].$1.id, 'p1');
+    expect(locs[0].$2, 2);
+    expect(locs[1].$1.id, 'p2');
+    expect(locs[1].$2, 1);
+
+    await state.removeTilesOnPage('com.x', 'p1');
+    final after = state.pinLocationsFor('com.x');
+    expect(after.length, 1);
+    expect(after.single.$1.id, 'p2');
+  });
+
   test('legacy single remote source migrates to a sync source', () async {
     final storage = _MemStorage();
     storage._data['settings'] = {

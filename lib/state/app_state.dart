@@ -693,18 +693,35 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
-  /// Removes every tile for [packageName] from the currently visible page.
-  Future<void> removeTilesOnCurrentPage(String packageName) async {
-    if (tilePages.isEmpty) return;
-    final currentId = currentTilePageId;
+  /// Every page where [packageName] is pinned, with the tile count per page,
+  /// in page order. Used to show all pin locations from other screens.
+  List<(TilePage, int)> pinLocationsFor(String packageName) {
+    final out = <(TilePage, int)>[];
+    for (final page in tilePages) {
+      final count =
+          tilesOnPage(page).where((t) => t.packageName == packageName).length;
+      if (count > 0) out.add((page, count));
+    }
+    return out;
+  }
+
+  /// Removes every tile for [packageName] from [pageId].
+  Future<void> removeTilesOnPage(String packageName, String pageId) async {
     final before = tiles.length;
     tiles.removeWhere((t) =>
-        t.packageName == packageName && _normalizedPageId(t) == currentId);
+        t.packageName == packageName && _normalizedPageId(t) == pageId);
     if (tiles.length == before) return;
     _syncPinned(packageName);
     await _persistTiles();
     await _persistMeta();
     notifyListeners();
+  }
+
+  /// Removes every tile for [packageName] from the currently visible page.
+  Future<void> removeTilesOnCurrentPage(String packageName) async {
+    final currentId = currentTilePageId;
+    if (currentId == null) return;
+    await removeTilesOnPage(packageName, currentId);
   }
 
   /// Add a tile for [packageName] on [pageId] (defaults to the current page).

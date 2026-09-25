@@ -63,6 +63,8 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
     final meta = state.metaFor(widget.packageName);
     final app = state.appByPackage(widget.packageName);
     final name = app?.appName ?? widget.packageName;
+    final pinLocations = state.pinLocationsFor(widget.packageName);
+    final currentPinCount = state.pinCountOnCurrentPage(widget.packageName);
 
     return Scaffold(
       appBar: AppBar(
@@ -111,17 +113,42 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
               ],
             ),
           const SizedBox(height: 8),
+          _SectionTitle('固定到磁贴'),
+          if (pinLocations.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 4, bottom: 8),
+              child: Text('尚未固定到任何磁贴页', style: TextStyle(fontSize: 13)),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(top: 6, bottom: 4),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final (page, count) in pinLocations)
+                    InputChip(
+                      avatar: const Icon(Icons.push_pin, size: 16),
+                      label: Text(
+                        count > 1 ? '${page.name} ×$count' : page.name,
+                      ),
+                      onDeleted: () =>
+                          state.removeTilesOnPage(widget.packageName, page.id),
+                    ),
+                ],
+              ),
+            ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            value: state.pinCountOnCurrentPage(widget.packageName) > 0,
+            value: currentPinCount > 0,
             onChanged: (v) => v
                 ? state.addTile(widget.packageName,
                     pageId: state.currentTilePageId)
                 : state.removeTilesOnCurrentPage(widget.packageName),
-            title: const Text('固定到当前磁贴页'),
-            subtitle: Text(
-              '仅作用于当前页「${_currentPageName(state)}」（可多份）',
-            ),
+            title: Text('固定到当前页「${_currentPageName(state)}」'),
+            subtitle: currentPinCount > 1
+                ? Text('当前页已有 $currentPinCount 份（可多份）')
+                : const Text('在当前磁贴页显示'),
           ),
           const SizedBox(height: 12),
           _SectionTitle('安装原因'),
