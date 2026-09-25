@@ -64,7 +64,8 @@ class NativeApps {
     return (r ?? {}).cast<String, dynamic>();
   }
 
-  /// Lists `.apk` files on a remote source. Each item has name/size/path.
+  /// Lists `.apk` files on a remote source, recursively. Each item has
+  /// name/rel/size/path/modified.
   static Future<List<Map<String, dynamic>>> remoteList(
       Map<String, dynamic> config) async {
     final raw = await _channel.invokeMethod<List<dynamic>>('remoteList', config);
@@ -72,5 +73,25 @@ class NativeApps {
     return raw
         .map((e) => (e as Map).cast<String, dynamic>())
         .toList(growable: false);
+  }
+
+  /// Downloads a remote file into the app cache; returns the local path.
+  static Future<String> remoteDownload(
+      Map<String, dynamic> config, String remotePath, String name) async {
+    final path = await _channel.invokeMethod<String>('remoteDownload', {
+      ...config,
+      'remotePath': remotePath,
+      'name': name,
+    });
+    if (path == null || path.isEmpty) {
+      throw StateError('下载失败');
+    }
+    return path;
+  }
+
+  /// Hands a downloaded APK to the system package installer.
+  static Future<bool> installApk(String path) async {
+    final ok = await _channel.invokeMethod<bool>('installApk', {'path': path});
+    return ok ?? false;
   }
 }

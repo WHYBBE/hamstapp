@@ -5,6 +5,7 @@ import '../state/app_state.dart';
 import '../widgets/app_tile.dart';
 import '../widgets/uninstall_reason.dart';
 import 'app_detail_screen.dart';
+import 'sync_screen.dart';
 
 class AppsScreen extends StatelessWidget {
   const AppsScreen({super.key});
@@ -20,6 +21,14 @@ class AppsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('应用', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
+          IconButton(
+            tooltip: '同步远程 APK',
+            icon: const Icon(Icons.cloud_sync_outlined),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SyncScreen()),
+            ),
+          ),
           IconButton(
             tooltip: state.appsStatsText,
             icon: const Icon(Icons.info_outline),

@@ -1,5 +1,11 @@
 /// Configuration of a remote APK source (FTP, SMB/Samba or WebDAV).
 class RemoteSource {
+  /// Stable id so a source can be edited/removed independently.
+  String id;
+
+  /// User-facing label shown on the sync tab.
+  String name;
+
   String protocol; // 'ftp' | 'smb' | 'webdav'
   String host;
   int port;
@@ -15,6 +21,8 @@ class RemoteSource {
   bool secure;
 
   RemoteSource({
+    this.id = '',
+    this.name = '',
     this.protocol = 'ftp',
     this.host = '',
     this.port = 21,
@@ -30,6 +38,8 @@ class RemoteSource {
     final protocol = map['protocol'] as String? ?? 'ftp';
     final secure = map['secure'] as bool? ?? false;
     return RemoteSource(
+      id: map['id'] as String? ?? '',
+      name: map['name'] as String? ?? '',
       protocol: protocol,
       host: map['host'] as String? ?? '',
       port: (map['port'] as num?)?.toInt() ?? defaultPort(protocol, secure: secure),
@@ -43,6 +53,8 @@ class RemoteSource {
   }
 
   Map<String, dynamic> toMap() => <String, dynamic>{
+        'id': id,
+        'name': name,
         'protocol': protocol,
         'host': host,
         'port': port,
@@ -79,6 +91,9 @@ class RemoteSource {
     return 'FTP';
   }
 
+  String get displayName =>
+      name.trim().isNotEmpty ? name.trim() : protocolLabel;
+
   String get summary {
     if (!configured) return '未配置';
     final auth = anonymous ? '匿名' : username;
@@ -98,6 +113,8 @@ class RemoteSource {
       };
 
   RemoteSource copyWith({
+    String? id,
+    String? name,
     String? protocol,
     String? host,
     int? port,
@@ -109,6 +126,8 @@ class RemoteSource {
     bool? secure,
   }) =>
       RemoteSource(
+        id: id ?? this.id,
+        name: name ?? this.name,
         protocol: protocol ?? this.protocol,
         host: host ?? this.host,
         port: port ?? this.port,

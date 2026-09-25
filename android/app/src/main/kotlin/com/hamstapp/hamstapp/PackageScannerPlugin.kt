@@ -13,6 +13,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import androidx.core.content.FileProvider
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import jcifs.CIFSContext
@@ -127,6 +128,23 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
                         }
                     }
                 }
+            }
+            "remoteDownload" -> {
+                val config = call.arguments as? Map<*, *> ?: emptyMap<String, Any?>()
+                executor.execute {
+                    try {
+                        val local = downloadRemoteFile(config)
+                        mainHandler.post { result.success(local) }
+                    } catch (t: Throwable) {
+                        mainHandler.post {
+                            result.error("DOWNLOAD_FAILED", describe(t), null)
+                        }
+                    }
+                }
+            }
+            "installApk" -> {
+                val path = call.argument<String>("path")
+                mainHandler.post { result.success(path != null && installApk(path)) }
             }
             else -> result.notImplemented()
         }
@@ -280,7 +298,31 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
             else -> ""
         }
 
-    /** Lists `.apk` files from an FTP or SMB (Samba) source. */
+    /** How many directory levels deep the APK scan will descend. */
+    private val maxScanDepth = 6
+
+    /**
+     * Real APK files only: skip hidden/dot entries (`.thumbnails`, macOS `._`
+     * resource forks, ...) and anything that is not an `.apk`.
+     */
+    private fun isApkName(name: String): Boolean =
+        !name.startsWith(".") && name.lowercase().endsWith(".apk")
+
+    private fun apkEntry(
+        name: String,
+        rel: String,
+        path: String,
+        size: Long,
+        modified: Long
+    ): Map<String, Any?> = mapOf(
+        "name" to name,
+        "rel" to rel,
+        "path" to path,
+        "size" to size,
+        "modified" to modified
+    )
+
+    /** Lists `.apk` files from an FTP or SMB (Samba) source, recursively. */
     private fun listRemoteApks(config: Map<*, *>): List<Map<String, Any?>> {
         val protocol = strArg(config, "protocol", "ftp").lowercase()
         return if (protocol == "smb" || protocol == "samba") {
@@ -297,11 +339,12 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
         val anonymous = boolArg(config, "anonymous")
         val user = if (anonymous) "anonymous" else strArg(config, "username")
         val pass = if (anonymous) "anonymous@" else strArg(config, "password")
-        val dir = strArg(config, "path", "/").ifEmpty { "/" }
+        val dirInput = strArg(config, "path", "/").ifEmpty { "/" }
+        val root = if (dirInput.endsWith("/")) dirInput else "$dirInput/"
 
         val ftp = FTPClient()
         ftp.connectTimeout = 10000
-        ftp.defaultTimeout = 15000
+        ftp.defaultTimeout = 20000
         try {
             ftp.connect(host, port)
             if (!ftp.login(user, pass)) {
@@ -309,22 +352,31 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
             }
             ftp.enterLocalPassiveMode()
             ftp.setFileType(FTPClient.BINARY_FILE_TYPE)
-            val files = ftp.listFiles(dir) ?: emptyArray<FTPFile>()
             val out = ArrayList<Map<String, Any?>>()
-            for (f in files) {
-                if (f == null || f.isDirectory) continue
-                val name = f.name ?: continue
-                if (!name.lowercase().endsWith(".apk")) continue
-                out.add(
-                    mapOf(
-                        "name" to name,
-                        "size" to f.size,
-                        "path" to (dir.trimEnd('/') + "/" + name),
-                        "modified" to (f.timestamp?.timeInMillis ?: 0L)
-                    )
-                )
+            val visited = HashSet<String>()
+            fun walk(current: String, rel: String, depth: Int) {
+                if (depth > maxScanDepth || !visited.add(current)) return
+                val files = runCatching { ftp.listFiles(current) }.getOrNull() ?: return
+                for (f in files) {
+                    if (f == null) continue
+                    val name = f.name ?: continue
+                    if (name == "." || name == ".." || name.startsWith(".")) continue
+                    val full = current + name
+                    val childRel = if (rel.isEmpty()) name else "$rel/$name"
+                    if (f.isDirectory) {
+                        walk("$full/", childRel, depth + 1)
+                    } else if (name.lowercase().endsWith(".apk")) {
+                        out.add(
+                            apkEntry(
+                                name, childRel, full, f.size,
+                                f.timestamp?.timeInMillis ?: 0L
+                            )
+                        )
+                    }
+                }
             }
-            out.sortBy { it["name"] as String }
+            walk(root, "", 0)
+            out.sortBy { it["rel"] as String }
             return out
         } finally {
             runCatching { ftp.logout() }
@@ -332,16 +384,16 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
         }
     }
 
-    private fun listSmb(config: Map<*, *>): List<Map<String, Any?>> {
-        val host = strArg(config, "host")
-        require(host.isNotEmpty()) { "主机不能为空" }
+    /**
+     * Builds a jcifs context (with timeouts/protocol/dialect tuned for NAS).
+     * Returns the base context (to close) and the credential-bound context.
+     */
+    private fun buildSmbContext(config: Map<*, *>): Pair<BaseContext, CIFSContext> {
         val port = intArg(config, "port", 445).let { if (it <= 0) 445 else it }
         val anonymous = boolArg(config, "anonymous")
         val user = strArg(config, "username")
         val pass = strArg(config, "password")
         val domain = strArg(config, "domain")
-        val path = strArg(config, "path").trim('/')
-        require(path.isNotEmpty()) { "请填写共享路径，例如 share/apks" }
 
         val props = Properties()
         // Resolve hostnames with DNS only: WINS/NetBIOS broadcast lookups are
@@ -361,37 +413,142 @@ class PackageScannerPlugin(private val context: Context) : MethodChannel.MethodC
         if (port != 445) props.setProperty("jcifs.smb.client.port", port.toString())
 
         val base = BaseContext(PropertyConfiguration(props))
+        val ctx = if (anonymous) {
+            base.withAnonymousCredentials()
+        } else {
+            // A blank domain is fine for Samba local users; Windows local
+            // accounts / domains need it ("WORKGROUP", "NAS\user", ...).
+            base.withCredentials(NtlmPasswordAuthenticator(domain, user, pass))
+        }
+        return base to ctx
+    }
+
+    private fun listSmb(config: Map<*, *>): List<Map<String, Any?>> {
+        val host = strArg(config, "host")
+        require(host.isNotEmpty()) { "主机不能为空" }
+        val port = intArg(config, "port", 445).let { if (it <= 0) 445 else it }
+        val path = strArg(config, "path").trim('/')
+        require(path.isNotEmpty()) { "请填写共享路径，例如 share/apks" }
+        val portPart = if (port != 445) ":$port" else ""
+
+        val (base, ctx) = buildSmbContext(config)
         try {
-            val ctx: CIFSContext = if (anonymous) {
-                base.withAnonymousCredentials()
-            } else {
-                // A blank domain is fine for Samba local users; Windows local
-                // accounts / domains need it ("WORKGROUP", "NAS\user", ...).
-                base.withCredentials(NtlmPasswordAuthenticator(domain, user, pass))
-            }
-            val portPart = if (port != 445) ":$port" else ""
-            val dir = SmbFile("smb://$host$portPart/$path/", ctx)
-            // listFiles() surfaces the real SmbException (wrong share, denied,
-            // bad credentials, ...), which is more useful than exists()==false.
-            val children = dir.listFiles() ?: emptyArray<SmbFile>()
+            val root = SmbFile("smb://$host$portPart/$path/", ctx)
             val out = ArrayList<Map<String, Any?>>()
-            for (f in children) {
-                if (f == null || f.isDirectory) continue
-                val name = f.name ?: continue
-                if (!name.lowercase().endsWith(".apk")) continue
-                out.add(
-                    mapOf(
-                        "name" to name,
-                        "size" to f.length(),
-                        "path" to "$path/$name",
-                        "modified" to f.lastModified()
-                    )
-                )
+            fun walk(dir: SmbFile, rel: String, depth: Int) {
+                if (depth > maxScanDepth) return
+                val children = dir.listFiles() ?: return
+                for (c in children) {
+                    if (c == null) continue
+                    val name = c.name?.trimEnd('/') ?: continue
+                    if (name.isEmpty() || name == "." || name == ".." ||
+                        name.startsWith(".")
+                    ) {
+                        continue
+                    }
+                    val childRel = if (rel.isEmpty()) name else "$rel/$name"
+                    if (c.isDirectory) {
+                        walk(c, childRel, depth + 1)
+                    } else if (name.lowercase().endsWith(".apk")) {
+                        out.add(
+                            apkEntry(
+                                name, childRel, "$path/$childRel",
+                                c.length(), c.lastModified()
+                            )
+                        )
+                    }
+                }
             }
-            out.sortBy { it["name"] as String }
+            walk(root, "", 0)
+            out.sortBy { it["rel"] as String }
             return out
         } finally {
             runCatching { base.close() }
+        }
+    }
+
+    // ------------------------------------------------------------ download/install
+
+    /**
+     * Downloads one remote file into the app cache and returns its local path.
+     * `remotePath` is the per-file path produced by the listing.
+     */
+    private fun downloadRemoteFile(config: Map<*, *>): String {
+        val remotePath = strArg(config, "remotePath")
+        require(remotePath.isNotEmpty()) { "缺少远程文件路径" }
+        val protocol = strArg(config, "protocol", "ftp").lowercase()
+
+        val name = strArg(config, "name").ifEmpty { remotePath.substringAfterLast('/') }
+        val safe = name.replace(Regex("[^A-Za-z0-9._-]"), "_").ifEmpty { "download.apk" }
+        val dir = File(context.cacheDir, "apk_downloads")
+        if (!dir.exists()) dir.mkdirs()
+        val target = File(dir, safe)
+
+        if (protocol == "smb" || protocol == "samba") {
+            downloadSmb(config, remotePath, target)
+        } else {
+            downloadFtp(config, remotePath, target)
+        }
+        return target.absolutePath
+    }
+
+    private fun downloadFtp(config: Map<*, *>, remotePath: String, target: File) {
+        val host = strArg(config, "host")
+        val port = intArg(config, "port", 21).let { if (it <= 0) 21 else it }
+        val anonymous = boolArg(config, "anonymous")
+        val user = if (anonymous) "anonymous" else strArg(config, "username")
+        val pass = if (anonymous) "anonymous@" else strArg(config, "password")
+
+        val ftp = FTPClient()
+        ftp.connectTimeout = 10000
+        ftp.defaultTimeout = 20000
+        try {
+            ftp.connect(host, port)
+            if (!ftp.login(user, pass)) throw IllegalStateException("FTP 登录失败")
+            ftp.enterLocalPassiveMode()
+            ftp.setFileType(FTPClient.BINARY_FILE_TYPE)
+            val ok = target.outputStream().use { ftp.retrieveFile(remotePath, it) }
+            if (!ok) throw IllegalStateException("下载失败：$remotePath")
+        } finally {
+            runCatching { ftp.logout() }
+            runCatching { ftp.disconnect() }
+        }
+    }
+
+    private fun downloadSmb(config: Map<*, *>, remotePath: String, target: File) {
+        val host = strArg(config, "host")
+        val port = intArg(config, "port", 445).let { if (it <= 0) 445 else it }
+        val portPart = if (port != 445) ":$port" else ""
+        val (base, ctx) = buildSmbContext(config)
+        try {
+            val remote = SmbFile("smb://$host$portPart/$remotePath", ctx)
+            remote.openInputStream().use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            }
+        } finally {
+            runCatching { base.close() }
+        }
+    }
+
+    /** Opens the system package installer for a downloaded APK (FileProvider). */
+    private fun installApk(path: String): Boolean {
+        val file = File(path)
+        if (!file.exists()) return false
+        return try {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            true
+        } catch (t: Throwable) {
+            false
         }
     }
 }

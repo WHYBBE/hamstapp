@@ -1,23 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../models/app_info.dart';
 import '../models/remote_source.dart';
 import '../services/remote_client.dart';
 import '../state/app_state.dart';
-import '../utils/format.dart';
-import '../widgets/app_icon.dart';
 
-/// Configure and sync a remote APK source (FTP / SMB).
-class RemoteSourceScreen extends StatefulWidget {
-  const RemoteSourceScreen({super.key});
+/// Create or edit one sync source (FTP / Samba / WebDAV).
+class SyncSourceEditScreen extends StatefulWidget {
+  const SyncSourceEditScreen({super.key, this.source});
+
+  /// `null` means "create a new source".
+  final RemoteSource? source;
 
   @override
-  State<RemoteSourceScreen> createState() => _RemoteSourceScreenState();
+  State<SyncSourceEditScreen> createState() => _SyncSourceEditScreenState();
 }
 
-class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
+class _SyncSourceEditScreenState extends State<SyncSourceEditScreen> {
   late String _protocol;
+  late final TextEditingController _name;
   late final TextEditingController _host;
   late final TextEditingController _port;
   late final TextEditingController _path;
@@ -28,12 +29,15 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
   late bool _secure;
   bool _busy = false;
 
+  bool get _isNew => widget.source == null;
+
   @override
   void initState() {
     super.initState();
-    final s = context.read<AppState>().remoteSource;
+    final s = widget.source ?? RemoteSource();
     // Normalise legacy/unknown protocol values so the segmented control is valid.
     _protocol = s.isSmb ? 'smb' : (s.isWebdav ? 'webdav' : 'ftp');
+    _name = TextEditingController(text: s.name);
     _host = TextEditingController(text: s.host);
     _port = TextEditingController(text: s.port.toString());
     _path = TextEditingController(text: s.path);
@@ -46,6 +50,7 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
 
   @override
   void dispose() {
+    _name.dispose();
     _host.dispose();
     _port.dispose();
     _path.dispose();
@@ -56,6 +61,8 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
   }
 
   RemoteSource _build() => RemoteSource(
+        id: widget.source?.id ?? '',
+        name: _name.text.trim(),
         protocol: _protocol,
         host: _host.text.trim(),
         port: int.tryParse(_port.text.trim()) ??
@@ -95,9 +102,19 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
   }
 
   Future<void> _save() async {
-    await context.read<AppState>().setRemoteSource(_build());
+    final cfg = _build();
+    if (cfg.host.trim().isEmpty || cfg.path.trim().isEmpty) {
+      _snack('请至少填写主机和路径');
+      return;
+    }
+    final state = context.read<AppState>();
+    if (_isNew) {
+      await state.addSyncSource(cfg);
+    } else {
+      await state.updateSyncSource(cfg);
+    }
     if (!mounted) return;
-    _snack('已保存');
+    Navigator.pop(context, true);
   }
 
   Future<void> _test() async {
@@ -118,112 +135,12 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
     }
   }
 
-  Future<void> _sync() async {
-    final state = context.read<AppState>();
-    final cfg = _build();
-    if (!cfg.configured) {
-      _snack('请先填写主机和路径');
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      final files = await RemoteClient.list(cfg);
-      await state.setRemoteSource(cfg);
-      if (!mounted) return;
-      if (files.isEmpty) {
-        _snack('该目录下没有找到 APK');
-        return;
-      }
-      _showResult(state, files);
-    } catch (e) {
-      _snack('同步失败：$e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  void _showResult(AppState state, List<Map<String, dynamic>> files) {
-    final matches = <MapEntry<AppInfo, Map<String, dynamic>>>[];
-    final others = <Map<String, dynamic>>[];
-    for (final f in files) {
-      final name = (f['name'] as String? ?? '').toLowerCase();
-      AppInfo? hit;
-      for (final a in state.apps) {
-        if (name.contains(a.packageName.toLowerCase())) {
-          hit = a;
-          break;
-        }
-      }
-      if (hit != null) {
-        matches.add(MapEntry(hit, f));
-      } else {
-        others.add(f);
-      }
-    }
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.7,
-        builder: (ctx, controller) => Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Row(
-                children: [
-                  const Icon(Icons.cloud_sync_outlined),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '可更新 ${matches.length} · 其它 ${others.length}',
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: ListView(
-                controller: controller,
-                children: [
-                  if (matches.isNotEmpty)
-                    const _SectionLabel('匹配到本机应用（可用于更新）'),
-                  ...matches.map((e) => ListTile(
-                        leading: AppIcon(
-                            packageName: e.key.packageName,
-                            label: e.key.appName),
-                        title: Text(e.key.appName),
-                        subtitle: Text(
-                            '${e.value['name']} · ${Fmt.size((e.value['size'] as num?)?.toInt() ?? 0)}'),
-                        trailing: const Icon(Icons.system_update_alt),
-                      )),
-                  if (others.isNotEmpty)
-                    const _SectionLabel('其它 APK'),
-                  ...others.map((f) => ListTile(
-                        leading: const Icon(Icons.android),
-                        title: Text(f['name'] as String? ?? ''),
-                        subtitle: Text(
-                            Fmt.size((f['size'] as num?)?.toInt() ?? 0)),
-                      )),
-                  const SizedBox(height: 24),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('远程 APK 源',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(_isNew ? '新建同步源' : '编辑同步源',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           TextButton(
             onPressed: _busy ? null : _test,
@@ -231,7 +148,7 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
           ),
           IconButton(
             tooltip: '保存',
-            icon: const Icon(Icons.save_outlined),
+            icon: const Icon(Icons.check),
             onPressed: _busy ? null : _save,
           ),
         ],
@@ -245,8 +162,15 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
-          const Text('连接局域网 / NAS 上的 FTP、Samba 或 WebDAV，'
-              '读取其中的 APK 列表用于更新软件。配置会被记住。'),
+          TextField(
+            controller: _name,
+            decoration: const InputDecoration(
+              labelText: '名称',
+              hintText: '例如 NAS / 路由器共享',
+              helperText: '显示在同步界面的标签页上，留空则用协议名',
+              border: OutlineInputBorder(),
+            ),
+          ),
           const SizedBox(height: 16),
           SegmentedButton<String>(
             segments: const [
@@ -283,10 +207,11 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
             decoration: InputDecoration(
               labelText: _protocol == 'smb' ? '共享路径' : '远程目录',
               hintText: _protocol == 'smb' ? 'share/apks' : '/apks',
+              helperText: '支持多层目录，会自动递归查找其中的 APK',
               border: const OutlineInputBorder(),
             ),
           ),
-          if (_protocol == 'webdav') ...[
+          if (_protocol == 'webdav')
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               value: _secure,
@@ -294,14 +219,12 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
               title: const Text('使用 HTTPS'),
               subtitle: const Text('WebDAV over TLS'),
             ),
-          ],
-          const SizedBox(height: 8),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: _anonymous,
             onChanged: (v) => setState(() => _anonymous = v),
             title: const Text('匿名登录'),
-            subtitle: const Text('无需账号密码（FTP anonymous / SMB 来宾 / WebDAV 无鉴权）'),
+            subtitle: const Text('FTP anonymous / SMB 来宾 / WebDAV 无鉴权'),
           ),
           if (!_anonymous) ...[
             TextField(
@@ -336,31 +259,11 @@ class _RemoteSourceScreenState extends State<RemoteSourceScreen> {
           ],
           const SizedBox(height: 20),
           FilledButton.icon(
-            onPressed: _busy ? null : _sync,
-            icon: const Icon(Icons.sync),
-            label: const Text('同步 APK 列表'),
+            onPressed: _busy ? null : _save,
+            icon: const Icon(Icons.save_outlined),
+            label: const Text('保存'),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: Theme.of(context).colorScheme.primary,
-        ),
       ),
     );
   }

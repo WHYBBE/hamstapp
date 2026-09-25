@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/native_apps.dart';
 import '../state/app_state.dart';
 import '../utils/backup_actions.dart';
-import 'remote_source_screen.dart';
+import 'sync_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -59,11 +59,11 @@ class SettingsScreen extends StatelessWidget {
           const _SectionHeader('高级'),
           ListTile(
             leading: const Icon(Icons.cloud_outlined),
-            title: const Text('远程 APK 源（FTP / Samba）'),
+            title: const Text('同步（FTP / Samba / WebDAV）'),
             subtitle: Text(state.remoteSource.summary),
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const RemoteSourceScreen()),
+              MaterialPageRoute(builder: (_) => const SyncScreen()),
             ),
           ),
           const Divider(height: 1),

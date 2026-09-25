@@ -867,17 +867,101 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Remembered remote APK source (FTP / SMB) used to sync the APK list.
+  // ---------------------------------------------------------------- sync
+
+  /// All configured remote APK sources (FTP / SMB / WebDAV), in tab order.
+  List<RemoteSource> get syncSources {
+    final raw = settings['sync_sources'];
+    if (raw is List) {
+      return raw
+          .whereType<Map>()
+          .map((m) => RemoteSource.fromMap(m.cast<String, dynamic>()))
+          .toList();
+    }
+    // Migrate the legacy single-source config into the list. The id is derived
+    // deterministically so repeated reads stay stable until it is persisted.
+    final old = settings['remote_source'];
+    if (old is Map) {
+      final s = RemoteSource.fromMap(old.cast<String, dynamic>());
+      if (s.configured) {
+        s.id = _legacySourceId(s);
+        if (s.name.trim().isEmpty) s.name = s.protocolLabel;
+        return [s];
+      }
+    }
+    return <RemoteSource>[];
+  }
+
+  static String _legacySourceId(RemoteSource s) =>
+      'src_${s.protocol}_${s.host}_${s.path}'
+          .replaceAll(RegExp(r'[^A-Za-z0-9_]+'), '_');
+
+  static String newSyncSourceId() =>
+      'src_${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
+
+  String get activeSyncSourceId => settings['sync_active'] as String? ?? '';
+
+  Future<void> _persistSyncSources(List<RemoteSource> list) async {
+    settings['sync_sources'] = list.map((s) => s.toMap()).toList();
+    await _persistSettings();
+    notifyListeners();
+  }
+
+  Future<RemoteSource> addSyncSource(RemoteSource source) async {
+    final list = syncSources;
+    if (source.id.isEmpty) source.id = newSyncSourceId();
+    if (source.name.trim().isEmpty) source.name = source.protocolLabel;
+    list.add(source);
+    settings['sync_active'] = source.id;
+    await _persistSyncSources(list);
+    return source;
+  }
+
+  Future<void> updateSyncSource(RemoteSource source) async {
+    final list = syncSources;
+    final i = list.indexWhere((s) => s.id == source.id);
+    if (i < 0) {
+      await addSyncSource(source);
+      return;
+    }
+    if (source.name.trim().isEmpty) source.name = source.protocolLabel;
+    list[i] = source;
+    await _persistSyncSources(list);
+  }
+
+  Future<void> removeSyncSource(String id) async {
+    final list = syncSources..removeWhere((s) => s.id == id);
+    if (activeSyncSourceId == id) {
+      settings['sync_active'] = list.isEmpty ? '' : list.first.id;
+    }
+    await _persistSyncSources(list);
+  }
+
+  Future<void> setActiveSyncSource(String id) async {
+    settings['sync_active'] = id;
+    await _persistSettings();
+    notifyListeners();
+  }
+
+  /// Remembered remote APK source (the active one, or the first configured).
   RemoteSource get remoteSource {
-    final raw = settings['remote_source'];
-    if (raw is Map) return RemoteSource.fromMap(raw.cast<String, dynamic>());
-    return RemoteSource();
+    final list = syncSources;
+    if (list.isEmpty) return RemoteSource();
+    final id = activeSyncSourceId;
+    return list.firstWhere((s) => s.id == id, orElse: () => list.first);
   }
 
   Future<void> setRemoteSource(RemoteSource source) async {
-    settings['remote_source'] = source.toMap();
-    await _persistSettings();
-    notifyListeners();
+    final list = syncSources;
+    final i = list.indexWhere((s) => s.id == activeSyncSourceId);
+    if (i < 0) {
+      await addSyncSource(source);
+      return;
+    }
+    source.id = list[i].id;
+    if (source.name.trim().isEmpty) source.name = list[i].name;
+    list[i] = source;
+    await _persistSyncSources(list);
   }
 
   // ---------------------------------------------------------------- backup

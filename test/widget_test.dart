@@ -478,4 +478,85 @@ void main() {
     state.apps = [_ai('com.legacy', 'L')];
     expect(state.pinCountOnPage(state.tilePages[1]), 1);
   });
+
+  test('webdav entries expose collections for recursion', () {
+    const xml = '''
+<D:multistatus xmlns:D="DAV:">
+  <D:response><D:href>/apks/</D:href>
+    <D:resourcetype><D:collection/></D:resourcetype></D:response>
+  <D:response><D:href>/apks/sub/</D:href>
+    <D:resourcetype><D:collection/></D:resourcetype></D:response>
+  <D:response><D:href>/apks/.hidden.apk</D:href>
+    <D:getcontentlength>9</D:getcontentlength></D:response>
+  <D:response><D:href>/apks/sub/App.apk</D:href>
+    <D:getcontentlength>42</D:getcontentlength></D:response>
+  <D:response><D:href>/apks/readme.txt</D:href>
+    <D:getcontentlength>1</D:getcontentlength></D:response>
+</D:multistatus>
+''';
+    final entries = RemoteClient.parseWebdavEntries(xml);
+    final dirs = entries.where((e) => e['isDir'] == true).map((e) => e['name']);
+    expect(dirs, containsAll(['apks', 'sub']));
+
+    // The files-only view keeps real APKs and drops hidden/non-apk entries.
+    final files = RemoteClient.parseWebdavListing(xml);
+    expect(files.map((f) => f['name']), ['App.apk']);
+    expect(files.single['name'], 'App.apk');
+    expect(files.single['size'], 42);
+  });
+
+  test('multiple sync sources add / switch / remove', () async {
+    final state = AppState(_MemStorage());
+    expect(state.syncSources, isEmpty);
+
+    final a = await state.addSyncSource(RemoteSource(
+      name: 'NAS',
+      protocol: 'smb',
+      host: 'nas',
+      path: 'apks',
+    ));
+    final b = await state.addSyncSource(RemoteSource(
+      name: 'FTP',
+      protocol: 'ftp',
+      host: 'ftp',
+      path: '/apks',
+    ));
+
+    expect(state.syncSources.length, 2);
+    expect(state.activeSyncSourceId, b.id); // newest becomes active
+    expect(a.name, 'NAS');
+    expect(b.name, 'FTP');
+
+    await state.setActiveSyncSource(a.id);
+    expect(state.remoteSource.host, 'nas');
+
+    await state.updateSyncSource(a.copyWith(name: 'NAS2', path: 'apks/sub'));
+    expect(state.remoteSource.name, 'NAS2');
+    expect(state.remoteSource.path, 'apks/sub');
+
+    await state.removeSyncSource(a.id);
+    expect(state.syncSources.length, 1);
+    expect(state.activeSyncSourceId, b.id);
+  });
+
+  test('legacy single remote source migrates to a sync source', () async {
+    final storage = _MemStorage();
+    storage._data['settings'] = {
+      'remote_source': RemoteSource(
+        protocol: 'smb',
+        host: 'nas.local',
+        path: 'share/apks',
+        anonymous: false,
+      ).toMap(),
+    };
+    final state = AppState(storage);
+    await state.init();
+
+    expect(state.syncSources.length, 1);
+    final s = state.syncSources.single;
+    expect(s.host, 'nas.local');
+    expect(s.path, 'share/apks');
+    expect(s.id, isNotEmpty);
+    expect(s.name, isNotEmpty); // falls back to the protocol label
+  });
 }
