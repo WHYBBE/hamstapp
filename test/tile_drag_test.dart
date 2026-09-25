@@ -3,8 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:hamstapp/models/app_info.dart';
+import 'package:hamstapp/models/category.dart';
 import 'package:hamstapp/models/tile.dart';
 import 'package:hamstapp/models/tile_page.dart';
+import 'package:hamstapp/screens/categories_tab.dart';
 import 'package:hamstapp/screens/quick_launch_screen.dart';
 import 'package:hamstapp/services/storage.dart';
 import 'package:hamstapp/state/app_state.dart';
@@ -165,5 +167,36 @@ void main() {
     final tile = find.byKey(const ValueKey('t1'));
     expect(tile, findsOneWidget);
     expect(tester.getRect(tile).left, greaterThan(400));
+  });
+
+  testWidgets('category screen can add an app to the category', (tester) async {
+    final cat = AppCategory(id: 'c1', name: '工具', emoji: '🛠');
+    final state = AppState(_MemStorage())
+      ..initialized = true
+      ..apps = [_ai('com.a', 'A')]
+      ..categories = [cat];
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: state,
+        child: MaterialApp(
+          home: CategoryAppsScreen(state: state, category: cat),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.textContaining('该分类下还没有应用'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('添加应用到该分类'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.widgetWithText(ListTile, 'A'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(state.metaFor('com.a').categoryIds, contains('c1'));
+    expect(find.byTooltip('移出分类'), findsOneWidget);
   });
 }
