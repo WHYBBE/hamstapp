@@ -82,4 +82,49 @@ void main() {
       reason: 'tile should have moved right',
     );
   });
+
+  testWidgets('empty tile page can enter edit mode and pin an app', (
+    tester,
+  ) async {
+    final state = AppState(_MemStorage())
+      ..initialized = true
+      ..apps = [_ai('com.a', 'A')]
+      ..tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)]
+      ..tiles = []
+      ..currentTilePageIndex = 0;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: state,
+        child: const MaterialApp(home: QuickLaunchScreen()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // Browsing an empty page shows the hint, not a board.
+    expect(find.textContaining('还没有磁贴'), findsOneWidget);
+
+    // Tap the edit button in the AppBar.
+    final editBtn = find.byIcon(Icons.edit_outlined);
+    expect(editBtn, findsOneWidget);
+    await tester.tap(editBtn);
+    await tester.pump();
+
+    expect(state.tileEditMode, isTrue);
+    // Editing an empty page must render the board/grid (hint replaced) and
+    // expose the pin action.
+    expect(find.textContaining('还没有磁贴'), findsNothing);
+    expect(find.byTooltip('置顶应用到磁贴'), findsOneWidget);
+
+    // Pinning from the edit action actually adds a tile to the empty page.
+    await tester.tap(find.byTooltip('置顶应用到磁贴'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.widgetWithText(ListTile, 'A'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(state.tiles.length, 1);
+    expect(state.tiles.first.pageId, 'p1');
+  });
 }

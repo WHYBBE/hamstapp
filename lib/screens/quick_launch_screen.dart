@@ -425,11 +425,13 @@ class _TileBoardState extends State<_TileBoard> {
     final page = widget.page;
     final editable = state.tileEditMode;
     final pageTiles = state.tilesOnPage(page);
-    if (pageTiles.isEmpty) {
+    // In edit mode an empty page still renders the board so the grid shows and
+    // apps can be pinned onto it; only browsing falls back to the hint.
+    if (pageTiles.isEmpty && !editable) {
       return _hint(
         context,
         icon: Icons.grid_view_rounded,
-        text: '「${page.name}」还没有磁贴\n点击右上角 ➕ 选择要置顶的应用',
+        text: '「${page.name}」还没有磁贴\n点击右上角 ✏️ 进入编辑，再点 ➕ 选择要置顶的应用',
       );
     }
 
@@ -453,9 +455,11 @@ class _TileBoardState extends State<_TileBoard> {
         final rows = layout.rows;
         // While dragging, extend the board so the highlighted target row is
         // always reachable (and the grid keeps drawing behind it).
-        final rowsShown = (_dragId != null && _dragRow + _dragH > rows)
+        var rowsShown = (_dragId != null && _dragRow + _dragH > rows)
             ? _dragRow + _dragH
             : rows;
+        // Guarantee a usable canvas/grid on an empty page in edit mode.
+        if (editable && rowsShown < 3) rowsShown = 3;
         final boardHeight =
             _pad * 2 +
             rowsShown * cellW +
@@ -489,6 +493,21 @@ class _TileBoardState extends State<_TileBoard> {
                           rows: rowsShown,
                           color: Theme.of(context).colorScheme.outline
                               .withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (editable && pageTiles.isEmpty)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            '点右上角 ➕ 选择要置顶的应用\n长按拖动移动，拖右下角缩放',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
                         ),
                       ),
                     ),
