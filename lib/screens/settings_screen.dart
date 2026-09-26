@@ -7,6 +7,7 @@ import '../state/app_state.dart';
 import '../utils/backup_actions.dart';
 import '../widgets/floating_nav.dart';
 import '../widgets/theme_color_picker.dart';
+import 'haptics_settings_screen.dart';
 import 'sync_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -131,6 +132,21 @@ class SettingsScreen extends StatelessWidget {
               state.showSystemStatusBar
                   ? Icons.visibility_outlined
                   : Icons.visibility_off_outlined,
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.vibration),
+            title: Text(context.strings.t('触感反馈')),
+            subtitle: Text(
+              state.hapticsEnabled
+                  ? context.strings.t('已开启')
+                  : context.strings.t('已关闭'),
+            ),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const HapticsSettingsScreen(),
+              ),
             ),
           ),
           const Divider(height: 1),

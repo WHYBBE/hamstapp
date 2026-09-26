@@ -27,13 +27,24 @@ class QuickLaunchScreen extends StatefulWidget {
 
 class _QuickLaunchScreenState extends State<QuickLaunchScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 4, vsync: this)
-    ..addListener(() {
-      if (!_tabs.indexIsChanging) setState(() {});
-    });
+  late final TabController _tabs;
+  int _lastTab = 0;
 
   RecentSort _recentSort = RecentSort.recent;
   int _recentSince = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: 4, vsync: this)..addListener(_onTabChanged);
+  }
+
+  void _onTabChanged() {
+    if (_tabs.index == _lastTab) return;
+    _lastTab = _tabs.index;
+    context.read<AppState>().haptic(HapticTrigger.launchTabs);
+    setState(() {});
+  }
 
   @override
   void dispose() {
@@ -326,6 +337,7 @@ class _TilesTabState extends State<_TilesTab> {
     final stateChanged = widget.state.currentTilePageIndex != i;
     final localChanged = _index != i;
     if (!stateChanged && !localChanged) return;
+    widget.state.haptic(HapticTrigger.tilePages);
     if (localChanged) setState(() => _index = i);
     if (stateChanged) widget.state.setCurrentTilePage(i);
   }

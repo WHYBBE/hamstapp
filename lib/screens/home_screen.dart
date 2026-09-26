@@ -31,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       return;
     }
+    if (i != _index) state.haptic(HapticTrigger.mainTabs);
     setState(() => _index = i);
   }
 

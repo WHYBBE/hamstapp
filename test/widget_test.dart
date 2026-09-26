@@ -437,6 +437,31 @@ void main() {
     expect(legacy.border, isTrue);
   });
 
+  test('haptics settings default on and persist', () async {
+    final state = AppState(_MemStorage());
+    expect(state.hapticsEnabled, isTrue);
+    expect(state.hapticsMainTabs, isTrue);
+    expect(state.hapticsLaunchTabs, isTrue);
+    expect(state.hapticsTilePages, isTrue);
+    expect(state.hapticEffect, HapticEffect.selection);
+    expect(state.hapticLevel, HapticLevel.light);
+
+    // Triggering haptics must never throw even without a platform channel.
+    await state.haptic(HapticTrigger.mainTabs);
+
+    await state.setHapticsEnabled(false);
+    await state.setHapticsMainTabs(false);
+    await state.setHapticEffect(HapticEffect.impact);
+    await state.setHapticLevel(HapticLevel.heavy);
+
+    final reopened = AppState(state.storage);
+    await reopened.init();
+    expect(reopened.hapticsEnabled, isFalse);
+    expect(reopened.hapticsMainTabs, isFalse);
+    expect(reopened.hapticEffect, HapticEffect.impact);
+    expect(reopened.hapticLevel, HapticLevel.heavy);
+  });
+
   test('language setting resolves and translates', () async {
     addTearDown(() => AppStrings.current = const AppStrings('zh'));
     final state = AppState(_MemStorage());

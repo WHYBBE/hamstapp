@@ -2,6 +2,7 @@ import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../l10n/app_strings.dart';
 import '../models/app_info.dart';
@@ -62,6 +63,19 @@ enum AppThemeMode { system, light, dark }
 /// - [colorful]: solid per-app color (the classic look).
 /// - [glass]: frosted, translucent "通透" look.
 enum TileStyle { colorful, glass }
+
+/// Where a haptic tick may be triggered.
+enum HapticTrigger { mainTabs, launchTabs, tilePages }
+
+/// The kind of feedback produced.
+///
+/// - [selection]: subtle click, best for switching tabs.
+/// - [impact]: an impact whose strength comes from [HapticLevel].
+/// - [vibrate]: a longer buzz.
+enum HapticEffect { selection, impact, vibrate }
+
+/// Strength used when [HapticEffect.impact] is selected.
+enum HapticLevel { light, medium, heavy }
 
 /// Default seed color for the color scheme (囤囤 orange).
 const int kDefaultThemeColor = 0xFFF0A030;
@@ -1150,6 +1164,98 @@ class AppState extends ChangeNotifier {
     settings['tile_default_size'] = value.clamp(1, kTileMaxH);
     await _persistSettings();
     notifyListeners();
+  }
+
+  // ---- haptics
+
+  bool get hapticsEnabled => settings['haptics_enabled'] as bool? ?? true;
+
+  bool get hapticsMainTabs => settings['haptics_main_tabs'] as bool? ?? true;
+
+  bool get hapticsLaunchTabs =>
+      settings['haptics_launch_tabs'] as bool? ?? true;
+
+  bool get hapticsTilePages => settings['haptics_tile_pages'] as bool? ?? true;
+
+  HapticEffect get hapticEffect {
+    final raw = settings['haptic_effect'] as String?;
+    return HapticEffect.values.firstWhere(
+      (e) => e.name == raw,
+      orElse: () => HapticEffect.selection,
+    );
+  }
+
+  HapticLevel get hapticLevel {
+    final raw = settings['haptic_level'] as String?;
+    return HapticLevel.values.firstWhere(
+      (l) => l.name == raw,
+      orElse: () => HapticLevel.light,
+    );
+  }
+
+  Future<void> _setHaptic(String key, Object value) async {
+    settings[key] = value;
+    await _persistSettings();
+    notifyListeners();
+  }
+
+  Future<void> setHapticsEnabled(bool value) =>
+      _setHaptic('haptics_enabled', value);
+
+  Future<void> setHapticsMainTabs(bool value) =>
+      _setHaptic('haptics_main_tabs', value);
+
+  Future<void> setHapticsLaunchTabs(bool value) =>
+      _setHaptic('haptics_launch_tabs', value);
+
+  Future<void> setHapticsTilePages(bool value) =>
+      _setHaptic('haptics_tile_pages', value);
+
+  Future<void> setHapticEffect(HapticEffect value) =>
+      _setHaptic('haptic_effect', value.name);
+
+  Future<void> setHapticLevel(HapticLevel value) =>
+      _setHaptic('haptic_level', value.name);
+
+  /// Plays a tick for [trigger] if haptics and that trigger are enabled.
+  Future<void> haptic(HapticTrigger trigger) async {
+    if (!hapticsEnabled) return;
+    final allowed = switch (trigger) {
+      HapticTrigger.mainTabs => hapticsMainTabs,
+      HapticTrigger.launchTabs => hapticsLaunchTabs,
+      HapticTrigger.tilePages => hapticsTilePages,
+    };
+    if (!allowed) return;
+    await _emitHaptic();
+  }
+
+  /// Plays the configured feedback once, ignoring the per-trigger switches.
+  /// Used by the settings preview.
+  Future<void> previewHaptic() async {
+    if (!hapticsEnabled) return;
+    await _emitHaptic();
+  }
+
+  Future<void> _emitHaptic() async {
+    try {
+      switch (hapticEffect) {
+        case HapticEffect.selection:
+          await HapticFeedback.selectionClick();
+        case HapticEffect.vibrate:
+          await HapticFeedback.vibrate();
+        case HapticEffect.impact:
+          switch (hapticLevel) {
+            case HapticLevel.light:
+              await HapticFeedback.lightImpact();
+            case HapticLevel.medium:
+              await HapticFeedback.mediumImpact();
+            case HapticLevel.heavy:
+              await HapticFeedback.heavyImpact();
+          }
+      }
+    } catch (_) {
+      // Haptics are best-effort; ignore devices/platforms without support.
+    }
   }
 
   /// Visual style of the tiles on the 磁贴 board. Defaults to
