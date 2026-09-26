@@ -1,5 +1,3 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -549,13 +547,16 @@ class _TileBoardState extends State<_TileBoard> {
                   if (glass)
                     Positioned.fill(
                       child: IgnorePointer(
-                        child: CustomPaint(
-                          painter: _GlassAuraPainter(
-                            primary: scheme.primary,
-                            secondary: scheme.secondary,
-                            tertiary: scheme.tertiary,
-                            dark: Theme.of(context).brightness ==
-                                Brightness.dark,
+                        child: RepaintBoundary(
+                          child: CustomPaint(
+                            key: const ValueKey('glass-aura'),
+                            painter: _GlassAuraPainter(
+                              primary: scheme.primary,
+                              secondary: scheme.secondary,
+                              tertiary: scheme.tertiary,
+                              dark: Theme.of(context).brightness ==
+                                  Brightness.dark,
+                            ),
                           ),
                         ),
                       ),
@@ -704,7 +705,9 @@ class _TileBoardState extends State<_TileBoard> {
       },
     );
 
-    return board;
+    // Cache the whole board as one layer so horizontal tab swipes only move it
+    // instead of re-rasterizing every tile + shadow each frame.
+    return RepaintBoundary(child: board);
   }
 }
 
@@ -891,11 +894,11 @@ class _GlassAuraPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final maxR = size.width > size.height ? size.width : size.height;
     final blobs = <(Alignment, double, Color)>[
-      (const Alignment(-0.85, -0.7), 0.85, primary),
-      (const Alignment(1.0, -0.1), 0.75, tertiary),
-      (const Alignment(-0.3, 1.0), 0.8, secondary),
+      (const Alignment(-0.85, -0.7), 0.9, primary),
+      (const Alignment(1.0, -0.1), 0.8, tertiary),
+      (const Alignment(-0.3, 1.0), 0.85, secondary),
     ];
-    final base = dark ? 0.30 : 0.18;
+    final base = dark ? 0.40 : 0.28;
     for (var i = 0; i < blobs.length; i++) {
       final (align, scale, color) = blobs[i];
       final center = align.withinRect(Offset.zero & size);
@@ -1287,81 +1290,78 @@ class _Tile extends StatelessWidget {
       child: _inner(context, glass: glass),
     );
 
-    final Widget tappable;
-    if (glass) {
-      // Frosted, translucent tile: the blurred board backdrop shows through a
-      // low-alpha gradient tinted with this app's color.
-      tappable = ClipRRect(
-        borderRadius: radius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              gradient: _glassGradient(theme, color),
-              border: Border.all(
-                color: Colors.white.withValues(
-                  alpha: theme.brightness == Brightness.dark ? 0.16 : 0.5,
-                ),
-              ),
-            ),
-            child: Material(type: MaterialType.transparency, child: ink),
-          ),
-        ),
-      );
-    } else {
-      tappable = Material(
+    if (!glass) {
+      final tappable = Material(
         color: color,
         borderRadius: radius,
         clipBehavior: Clip.antiAlias,
         child: ink,
       );
+      return editable ? _editFrame(tappable, radius, Colors.white) : tappable;
     }
 
-    if (editable) {
-      return Stack(
-        children: [
-          Positioned.fill(child: tappable),
-          Positioned.fill(
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: radius,
-                  border: Border.all(
-                    color: glass
-                        ? scheme.primary.withValues(alpha: 0.85)
-                        : Colors.white.withValues(alpha: 0.85),
-                    width: 1.5,
-                  ),
+    // 通透: cheap translucency — deliberately no BackdropFilter (a blur per
+    // tile makes tab swipes janky). The tinted aura painted behind the board
+    // shows through the semi-transparent fill instead.
+    final dark = theme.brightness == Brightness.dark;
+    final tappable = DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        gradient: _glassGradient(theme, color),
+        border: Border.all(
+          color: scheme.onSurface.withValues(alpha: dark ? 0.14 : 0.08),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: dark ? 0.28 : 0.08),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Material(type: MaterialType.transparency, child: ink),
+    );
+    return editable ? _editFrame(tappable, radius, scheme.primary) : tappable;
+  }
+
+  /// Wraps a tile with the edit-mode outline used to show it can be moved.
+  Widget _editFrame(Widget child, BorderRadius radius, Color border) {
+    return Stack(
+      children: [
+        Positioned.fill(child: child),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                border: Border.all(
+                  color: border.withValues(alpha: 0.85),
+                  width: 1.5,
                 ),
               ),
             ),
           ),
-        ],
-      );
-    }
-
-    // No visible overflow button: the menu is opened by long-pressing (browse
-    // mode) or tapping (edit mode).
-    return tappable;
+        ),
+      ],
+    );
   }
 
-  /// Translucent gradient for the frosted (通透) tile fill. Composites a
-  /// low-alpha tint of the app color over the theme surface so it stays milky
-  /// rather than fully transparent.
+  /// Translucent gradient for the frosted (通透) tile fill: a mostly neutral,
+  /// theme-adaptive surface with just a hint of the app color, so the tinted
+  /// aura behind reads through as clean colored glass instead of a muddy wash.
   LinearGradient _glassGradient(ThemeData theme, Color tint) {
     final dark = theme.brightness == Brightness.dark;
     final surface = theme.colorScheme.surface;
-    Color fill(double tintA, double baseA) => Color.alphaBlend(
+    Color fill(double tintA, double surfA) => Color.alphaBlend(
           tint.withValues(alpha: tintA),
-          surface.withValues(alpha: baseA),
+          surface.withValues(alpha: surfA),
         );
     return LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
       colors: [
-        fill(dark ? 0.30 : 0.24, dark ? 0.55 : 0.62),
-        fill(dark ? 0.14 : 0.10, dark ? 0.42 : 0.50),
+        fill(dark ? 0.14 : 0.10, dark ? 0.55 : 0.72),
+        fill(dark ? 0.06 : 0.04, dark ? 0.36 : 0.54),
       ],
     );
   }
