@@ -201,6 +201,14 @@ const Map<String, String> _en = <String, String>{
   '关闭后内容填满磁贴': 'When off, content fills the tile',
   '显示边框': 'Show border',
   '关闭后只显示图标/文字，无底板': 'When off, only the icon/text shows, no backdrop',
+  '固定到磁贴页…': 'Pin to a tile page…',
+  '可固定到任意磁贴页，或长按再加一份':
+      'Pin to any tile page, or long-press to add another',
+  '还没有磁贴页，先在「启动 → 磁贴」新建一个吧':
+      'No tile pages yet — create one under Launch → Tiles first',
+  '固定到磁贴页': 'Pin to a tile page',
+  '点击固定/取消，长按再添加一个': 'Tap to pin/unpin, long-press to add another',
+  '已固定 {n} 份': '{n} pinned',
   '分类排序': 'Category order',
   '分类名称': 'Category name',
   '选择一个预设色，或自定义任意颜色':

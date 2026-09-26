@@ -1462,8 +1462,10 @@ class _Tile extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) =>
-                            AppDetailScreen(packageName: app.packageName),
+                        builder: (_) => AppDetailScreen(
+                          packageName: app.packageName,
+                          fromTileBoard: true,
+                        ),
                       ),
                     );
                   },

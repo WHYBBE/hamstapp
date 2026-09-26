@@ -6,6 +6,7 @@ import 'package:hamstapp/models/app_info.dart';
 import 'package:hamstapp/models/category.dart';
 import 'package:hamstapp/models/tile.dart';
 import 'package:hamstapp/models/tile_page.dart';
+import 'package:hamstapp/screens/app_detail_screen.dart';
 import 'package:hamstapp/screens/categories_tab.dart';
 import 'package:hamstapp/screens/quick_launch_screen.dart';
 import 'package:hamstapp/services/storage.dart';
@@ -390,6 +391,41 @@ void main() {
       find.descendant(of: tile, matching: find.text('Alpha')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('app detail can pin to any tile page', (tester) async {
+    final state = AppState(_MemStorage())
+      ..initialized = true
+      ..apps = [_ai('com.a', 'A')]
+      ..tilePages = [
+        TilePage(id: 'p1', name: 'P1', createdAt: 0),
+        TilePage(id: 'p2', name: 'P2', createdAt: 0),
+      ]
+      ..currentTilePageIndex = 0;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: state,
+        child: const MaterialApp(
+          home: AppDetailScreen(packageName: 'com.a'),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(state.tiles, isEmpty);
+
+    // Open the page picker and choose the page that is NOT the current one.
+    await tester.tap(find.text('固定到磁贴页…'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.widgetWithText(ListTile, 'P2'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(state.tiles.length, 1);
+    expect(state.tiles.first.pageId, 'p2');
   });
 
   testWidgets('category screen can add an app to the category', (tester) async {

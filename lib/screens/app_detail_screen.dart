@@ -13,15 +13,24 @@ import '../widgets/app_icon.dart';
 import '../widgets/app_tile.dart';
 
 class AppDetailScreen extends StatefulWidget {
-  const AppDetailScreen({super.key, required this.packageName});
+  const AppDetailScreen({
+    super.key,
+    required this.packageName,
+    this.fromTileBoard = false,
+  });
 
   final String packageName;
+
+  /// True when this screen was opened from the 磁贴 board, which enables the
+  /// quick "pin to the current page" switch.
+  final bool fromTileBoard;
 
   @override
   State<AppDetailScreen> createState() => _AppDetailScreenState();
 }
 
 class _AppDetailScreenState extends State<AppDetailScreen> {
+  late final AppState _appState;
   late final TextEditingController _reason;
   late final TextEditingController _note;
   Timer? _debounce;
@@ -29,8 +38,10 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
   @override
   void initState() {
     super.initState();
-    final state = context.read<AppState>();
-    final meta = state.metaFor(widget.packageName);
+    // Capture the state now: looking it up from context during dispose() is
+    // unsafe (the element is already deactivated).
+    _appState = context.read<AppState>();
+    final meta = _appState.metaFor(widget.packageName);
     _reason = TextEditingController(text: meta.reason);
     _note = TextEditingController(text: meta.note);
   }
@@ -38,7 +49,7 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
   @override
   void dispose() {
     _debounce?.cancel();
-    context.read<AppState>().persistMeta();
+    _appState.persistMeta();
     _reason.dispose();
     _note.dispose();
     super.dispose();
@@ -54,7 +65,7 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
   void _schedulePersist() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      if (mounted) context.read<AppState>().persistMeta();
+      if (mounted) _appState.persistMeta();
     });
   }
 
@@ -144,26 +155,52 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
                 ],
               ),
             ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: currentPinCount > 0,
-            onChanged: (v) => v
-                ? state.addTile(widget.packageName,
-                    pageId: state.currentTilePageId)
-                : state.removeTilesOnCurrentPage(widget.packageName),
-            title: Text(
-              context.strings.t('固定到当前页「{page}」', {
-                'page': _currentPageName(state),
-              }),
+          // Quick pin, only offered from the tile board where "the current
+          // page" is meaningful.
+          if (widget.fromTileBoard && state.tilePages.isNotEmpty)
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: currentPinCount > 0,
+              onChanged: (v) => v
+                  ? state.addTile(widget.packageName,
+                      pageId: state.currentTilePageId)
+                  : state.removeTilesOnCurrentPage(widget.packageName),
+              title: Text(
+                context.strings.t('固定到当前页「{page}」', {
+                  'page': _currentPageName(state),
+                }),
+              ),
+              subtitle: currentPinCount > 1
+                  ? Text(
+                      context.strings.t('当前页已有 {n} 份（可多份）', {
+                        'n': currentPinCount,
+                      }),
+                    )
+                  : Text(context.strings.t('在当前磁贴页显示')),
             ),
-            subtitle: currentPinCount > 1
-                ? Text(
-                    context.strings.t('当前页已有 {n} 份（可多份）', {
-                      'n': currentPinCount,
-                    }),
-                  )
-                : Text(context.strings.t('在当前磁贴页显示')),
-          ),
+          // Pick any page, so managing an app from the Apps tab is not tied to
+          // whichever tile page happened to be selected.
+          if (state.tilePages.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                context.strings.t('还没有磁贴页，先在「启动 → 磁贴」新建一个吧'),
+                style: const TextStyle(fontSize: 13),
+              ),
+            )
+          else
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.dashboard_customize_outlined),
+              title: Text(context.strings.t('固定到磁贴页…')),
+              subtitle: Text(context.strings.t('可固定到任意磁贴页，或长按再加一份')),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => showPinToPagesSheet(
+                context,
+                state,
+                widget.packageName,
+              ),
+            ),
           const SizedBox(height: 12),
           _SectionTitle(context.strings.t('安装原因')),
           TextField(
@@ -401,4 +438,106 @@ class _InfoTable extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Bottom sheet to pin [packageName] onto any tile page.
+///
+/// Tap a page to pin (or clear that page when already pinned); long-press to
+/// add one more copy. Works regardless of which page is currently selected,
+/// so managing an app from the Apps tab is not tied to a stale tile page.
+void showPinToPagesSheet(
+  BuildContext context,
+  AppState state,
+  String packageName,
+) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) => SafeArea(
+      child: StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final pages = state.tilePages;
+          final s = ctx.strings;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.t('固定到磁贴页'),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      s.t('点击固定/取消，长按再添加一个'),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: pages.length,
+                  itemBuilder: (context, i) {
+                    final page = pages[i];
+                    final count = state
+                        .tilesOnPage(page)
+                        .where((t) => t.packageName == packageName)
+                        .length;
+                    final pinned = count > 0;
+                    return ListTile(
+                      leading: const Icon(Icons.grid_view_rounded),
+                      title: Text(page.name),
+                      subtitle: count > 1
+                          ? Text(s.t('已固定 {n} 份', {'n': count}))
+                          : null,
+                      trailing: pinned
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.push_pin,
+                                  color: Colors.orange,
+                                  size: 18,
+                                ),
+                                if (count > 1) ...[
+                                  const SizedBox(width: 4),
+                                  Text('×$count'),
+                                ],
+                              ],
+                            )
+                          : const Icon(Icons.add),
+                      onTap: () {
+                        if (pinned) {
+                          state.removeTilesOnPage(packageName, page.id);
+                        } else {
+                          state.addTile(packageName, pageId: page.id);
+                        }
+                        setLocal(() {});
+                      },
+                      onLongPress: () {
+                        state.addTile(packageName, pageId: page.id);
+                        setLocal(() {});
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    ),
+  );
 }
