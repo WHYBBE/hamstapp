@@ -412,6 +412,24 @@ void main() {
     expect(reopened.tileStyle, TileStyle.glass);
   });
 
+  test('tile showLabel defaults and round-trips through the model', () {
+    final t = Tile(
+      id: 't1',
+      packageName: 'com.a',
+      pageId: 'p1',
+      showLabel: false,
+    );
+    expect(Tile.fromMap(t.toMap()).showLabel, isFalse);
+
+    // Missing key (older backups) defaults to showing the label.
+    final legacy = Tile.fromMap({
+      'id': 't2',
+      'packageName': 'com.a',
+      'pageId': 'p1',
+    });
+    expect(legacy.showLabel, isTrue);
+  });
+
   test('language setting resolves and translates', () async {
     addTearDown(() => AppStrings.current = const AppStrings('zh'));
     final state = AppState(_MemStorage());

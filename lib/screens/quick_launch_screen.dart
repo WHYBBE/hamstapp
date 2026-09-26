@@ -1313,7 +1313,9 @@ class _Tile extends StatelessWidget {
         final h = constraints.maxHeight;
         final shortest = w < h ? w : h;
         final pad = (shortest * 0.07).clamp(3.0, 18.0).toDouble();
-        final showLabel = h > 46;
+        // Tiles shorter than the label height never fit text; the per-tile
+        // flag additionally lets any tile be icon-only.
+        final showLabel = tile.showLabel && h > 46;
         // Multi-cell tiles get a slightly smaller icon so it does not look
         // oversized; 1xN tiles keep filling the space.
         final iconScale = (tile.w >= 2 && tile.h >= 2) ? 0.8 : 1.0;
@@ -1397,32 +1399,44 @@ class _Tile extends StatelessWidget {
       context: context,
       builder: (ctx) => SafeArea(
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title: Text(context.strings.t('应用详情')),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          AppDetailScreen(packageName: app.packageName),
-                    ),
-                  );
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.push_pin_outlined),
-                title: Text(context.strings.t('移除该磁贴')),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  state.removeTile(tile.id);
-                },
-              ),
-            ],
+          // Rebuild the sheet when the tile is toggled so the switch reflects
+          // the new value without closing the sheet.
+          child: ListenableBuilder(
+            listenable: state,
+            builder: (ctx, _) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SwitchListTile(
+                  secondary: const Icon(Icons.label_outline),
+                  title: Text(context.strings.t('显示应用名称')),
+                  subtitle: Text(context.strings.t('关闭后磁贴只显示图标')),
+                  value: state.tileById(tile.id)?.showLabel ?? true,
+                  onChanged: (v) => state.setTileShowLabel(tile.id, v),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: Text(context.strings.t('应用详情')),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            AppDetailScreen(packageName: app.packageName),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.push_pin_outlined),
+                  title: Text(context.strings.t('移除该磁贴')),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    state.removeTile(tile.id);
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),

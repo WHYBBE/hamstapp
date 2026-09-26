@@ -195,6 +195,8 @@ const Map<String, String> _en = <String, String>{
   '关闭后隐藏系统状态栏，内容更沉浸；向下滑动可临时唤出':
       'Hide the system status bar for a more immersive view; swipe down to reveal it temporarily.',
   '新增磁贴默认大小': 'Default size for new tiles',
+  '显示应用名称': 'Show app name',
+  '关闭后磁贴只显示图标': 'When off, the tile shows only its icon',
   '分类排序': 'Category order',
   '分类名称': 'Category name',
   '选择一个预设色，或自定义任意颜色':

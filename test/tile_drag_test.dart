@@ -10,6 +10,7 @@ import 'package:hamstapp/screens/categories_tab.dart';
 import 'package:hamstapp/screens/quick_launch_screen.dart';
 import 'package:hamstapp/services/storage.dart';
 import 'package:hamstapp/state/app_state.dart';
+import 'package:hamstapp/widgets/app_icon.dart';
 import 'package:hamstapp/widgets/category_editor.dart';
 
 class _MemStorage implements Storage {
@@ -249,6 +250,57 @@ void main() {
     expect(
       find.descendant(of: tile, matching: find.byType(BackdropFilter)),
       findsNothing,
+    );
+  });
+
+  testWidgets('a tile can hide its label and show the icon only', (
+    tester,
+  ) async {
+    final state = AppState(_MemStorage())
+      ..initialized = true
+      ..apps = [_ai('com.a', 'Alpha')]
+      ..tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)]
+      ..tiles = [
+        Tile(
+          id: 't1',
+          packageName: 'com.a',
+          pageId: 'p1',
+          col: 0,
+          row: 0,
+          w: 2,
+          h: 2,
+        ),
+      ]
+      ..currentTilePageIndex = 0;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: state,
+        child: const MaterialApp(home: QuickLaunchScreen()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+
+    final tile = find.byKey(const ValueKey('t1'));
+    expect(tile, findsOneWidget);
+    // A 2x2 tile is tall enough to show the full app name.
+    expect(
+      find.descendant(of: tile, matching: find.text('Alpha')),
+      findsOneWidget,
+    );
+
+    await state.setTileShowLabel('t1', false);
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // Label gone; the icon is still rendered so the tile is not empty.
+    expect(
+      find.descendant(of: tile, matching: find.text('Alpha')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: tile, matching: find.byType(AppIcon)),
+      findsOneWidget,
     );
   });
 

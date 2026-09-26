@@ -15,6 +15,10 @@ class Tile {
   int w;
   int h;
 
+  /// Whether the app name is shown under the icon. When false the tile is
+  /// icon-only (1x1 tiles already hide the label regardless of this).
+  bool showLabel;
+
   Tile({
     required this.id,
     required this.packageName,
@@ -23,6 +27,7 @@ class Tile {
     this.row = -1,
     this.w = 1,
     this.h = 1,
+    this.showLabel = true,
   });
 
   factory Tile.fromMap(Map<String, dynamic> map) => Tile(
@@ -33,6 +38,7 @@ class Tile {
         row: map['row'] as int? ?? -1,
         w: map['w'] as int? ?? 1,
         h: map['h'] as int? ?? 1,
+        showLabel: map['showLabel'] as bool? ?? true,
       );
 
   Map<String, dynamic> toMap() => {
@@ -43,5 +49,6 @@ class Tile {
         'row': row,
         'w': w,
         'h': h,
+        'showLabel': showLabel,
       };
 }
