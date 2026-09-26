@@ -185,6 +185,11 @@ const Map<String, String> _en = <String, String>{
   '最近 · 排序与筛选': 'Recent · sort & filter',
   '主题模式': 'Theme mode',
   '主题色': 'Theme color',
+  '磁贴样式': 'Tile style',
+  '多彩': 'Colorful',
+  '通透': 'Glass',
+  '每个应用一种纯色，醒目活泼': 'A solid color per app, bold and lively',
+  '毛玻璃半透明，轻盈通透': 'Frosted and translucent, light and airy',
   '导航栏模式': 'Navigation style',
   '显示系统状态栏': 'Show system status bar',
   '关闭后隐藏系统状态栏，内容更沉浸；向下滑动可临时唤出':

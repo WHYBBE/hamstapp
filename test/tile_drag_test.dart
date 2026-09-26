@@ -205,6 +205,52 @@ void main() {
     expect(find.byKey(const ValueKey('t2')), findsOneWidget);
   });
 
+  testWidgets('tile style switches between solid and frosted glass', (
+    tester,
+  ) async {
+    final state = AppState(_MemStorage())
+      ..initialized = true
+      ..apps = [_ai('com.a', 'A')]
+      ..tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)]
+      ..tiles = [
+        Tile(
+          id: 't1',
+          packageName: 'com.a',
+          pageId: 'p1',
+          col: 0,
+          row: 0,
+          w: 2,
+          h: 2,
+        ),
+      ]
+      ..currentTilePageIndex = 0;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: state,
+        child: const MaterialApp(home: QuickLaunchScreen()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final tile = find.byKey(const ValueKey('t1'));
+    expect(tile, findsOneWidget);
+    // The classic style paints a solid Material, with no backdrop blur.
+    expect(
+      find.descendant(of: tile, matching: find.byType(BackdropFilter)),
+      findsNothing,
+    );
+
+    await state.setTileStyle(TileStyle.glass);
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      find.descendant(of: tile, matching: find.byType(BackdropFilter)),
+      findsOneWidget,
+      reason: 'glass tiles should render a frosted backdrop',
+    );
+  });
+
   testWidgets('category screen can add an app to the category', (tester) async {
     final cat = AppCategory(id: 'c1', name: '工具', emoji: '🛠');
     final state = AppState(_MemStorage())

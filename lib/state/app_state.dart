@@ -57,6 +57,12 @@ enum NavMode { auto, bottom, rail, floating }
 /// - [dark]: always dark.
 enum AppThemeMode { system, light, dark }
 
+/// Visual style of the tiles on the 磁贴 board.
+///
+/// - [colorful]: solid per-app color (the classic look).
+/// - [glass]: frosted, translucent "通透" look.
+enum TileStyle { colorful, glass }
+
 /// Default seed color for the color scheme (囤囤 orange).
 const int kDefaultThemeColor = 0xFFF0A030;
 
@@ -1115,6 +1121,22 @@ class AppState extends ChangeNotifier {
 
   Future<void> setTileDefaultSize(int value) async {
     settings['tile_default_size'] = value.clamp(1, kTileMaxH);
+    await _persistSettings();
+    notifyListeners();
+  }
+
+  /// Visual style of the tiles on the 磁贴 board. Defaults to
+  /// [TileStyle.colorful].
+  TileStyle get tileStyle {
+    final raw = settings['tile_style'] as String?;
+    return TileStyle.values.firstWhere(
+      (s) => s.name == raw,
+      orElse: () => TileStyle.colorful,
+    );
+  }
+
+  Future<void> setTileStyle(TileStyle value) async {
+    settings['tile_style'] = value.name;
     await _persistSettings();
     notifyListeners();
   }

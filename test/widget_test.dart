@@ -399,6 +399,19 @@ void main() {
     expect(reopened.themeColor, kThemeColorPresets[4]);
   });
 
+  test('tile style persists through settings', () async {
+    final state = AppState(_MemStorage());
+    expect(state.tileStyle, TileStyle.colorful);
+
+    await state.setTileStyle(TileStyle.glass);
+    expect(state.tileStyle, TileStyle.glass);
+
+    // Round-trips through a fresh state backed by the same storage.
+    final reopened = AppState(state.storage);
+    await reopened.init();
+    expect(reopened.tileStyle, TileStyle.glass);
+  });
+
   test('language setting resolves and translates', () async {
     addTearDown(() => AppStrings.current = const AppStrings('zh'));
     final state = AppState(_MemStorage());

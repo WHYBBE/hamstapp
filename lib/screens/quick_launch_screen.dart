@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -470,6 +472,8 @@ class _TileBoardState extends State<_TileBoard> {
     final state = widget.state;
     final page = widget.page;
     final editable = state.tileEditMode;
+    final glass = state.tileStyle == TileStyle.glass;
+    final scheme = Theme.of(context).colorScheme;
     final pageTiles = state.tilesOnPage(page);
     // In edit mode an empty page still renders the board so the grid shows and
     // apps can be pinned onto it; only browsing falls back to the hint.
@@ -540,6 +544,22 @@ class _TileBoardState extends State<_TileBoard> {
                 // active Draggable and cancels the move. So the highlight slot is
                 // always present in edit mode and only its content toggles.
                 children: [
+                  // Soft tinted blobs painted behind the tiles so the frosted
+                  // (通透) tiles have something to blur, giving real depth.
+                  if (glass)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _GlassAuraPainter(
+                            primary: scheme.primary,
+                            secondary: scheme.secondary,
+                            tertiary: scheme.tertiary,
+                            dark: Theme.of(context).brightness ==
+                                Brightness.dark,
+                          ),
+                        ),
+                      ),
+                    ),
                   if (editable)
                     Positioned.fill(
                       child: IgnorePointer(
@@ -584,10 +604,16 @@ class _TileBoardState extends State<_TileBoard> {
                             ? const SizedBox.shrink()
                             : DecoratedBox(
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.18),
+                                  color: (glass
+                                          ? scheme.primary
+                                          : Colors.white)
+                                      .withValues(alpha: 0.18),
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.9),
+                                    color: (glass
+                                            ? scheme.primary
+                                            : Colors.white)
+                                        .withValues(alpha: 0.9),
                                     width: 2,
                                   ),
                                 ),
@@ -844,6 +870,54 @@ class _TileGridPainter extends CustomPainter {
       old.cols != cols ||
       old.rows != rows ||
       old.color != color;
+}
+
+/// Paints a few large, very soft radial blobs behind the tile board so the
+/// frosted (通透) tiles have a non-uniform backdrop worth blurring.
+class _GlassAuraPainter extends CustomPainter {
+  _GlassAuraPainter({
+    required this.primary,
+    required this.secondary,
+    required this.tertiary,
+    required this.dark,
+  });
+
+  final Color primary;
+  final Color secondary;
+  final Color tertiary;
+  final bool dark;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final maxR = size.width > size.height ? size.width : size.height;
+    final blobs = <(Alignment, double, Color)>[
+      (const Alignment(-0.85, -0.7), 0.85, primary),
+      (const Alignment(1.0, -0.1), 0.75, tertiary),
+      (const Alignment(-0.3, 1.0), 0.8, secondary),
+    ];
+    final base = dark ? 0.30 : 0.18;
+    for (var i = 0; i < blobs.length; i++) {
+      final (align, scale, color) = blobs[i];
+      final center = align.withinRect(Offset.zero & size);
+      final radius = maxR * scale;
+      final alpha = base * (1.0 - i * 0.18);
+      final paint = Paint()
+        ..shader = RadialGradient(
+          colors: [
+            color.withValues(alpha: alpha),
+            color.withValues(alpha: 0),
+          ],
+        ).createShader(Rect.fromCircle(center: center, radius: radius));
+      canvas.drawCircle(center, radius, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GlassAuraPainter old) =>
+      old.primary != primary ||
+      old.secondary != secondary ||
+      old.tertiary != tertiary ||
+      old.dark != dark;
 }
 
 /// Draws a small rounded corner border in the bottom-right corner.
@@ -1199,85 +1273,51 @@ class _Tile extends StatelessWidget {
   }
 
   Widget _content(BuildContext context, bool editable) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final glass = state.tileStyle == TileStyle.glass;
     final color = _tileColor(app.appName);
-    final tappable = Material(
-      color: color,
-      borderRadius: BorderRadius.circular(10),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: editable
-            ? () => _showTileMenu(context)
-            : () => launchApp(context, app.packageName),
-        onLongPress: editable ? null : () => _showTileMenu(context),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final w = constraints.maxWidth;
-            final h = constraints.maxHeight;
-            final shortest = w < h ? w : h;
-            final pad = (shortest * 0.07).clamp(3.0, 18.0).toDouble();
-            final showLabel = h > 46;
-            // Multi-cell tiles get a slightly smaller icon so it does not look
-            // oversized; 1xN tiles keep filling the space.
-            final iconScale = (tile.w >= 2 && tile.h >= 2) ? 0.8 : 1.0;
+    final radius = BorderRadius.circular(glass ? 14 : 10);
 
-            if (!showLabel) {
-              return Padding(
-                padding: EdgeInsets.all(pad),
-                child: Center(
-                  child: AppIcon(
-                    packageName: app.packageName,
-                    label: app.appName,
-                    size: (shortest - pad * 2)
-                        .clamp(8.0, double.infinity)
-                        .toDouble(),
-                  ),
-                ),
-              );
-            }
-
-            final maxLines = h >= 120 ? 2 : 1;
-            final fontSize = (shortest * 0.15).clamp(10.0, 16.0).toDouble();
-            return Padding(
-              padding: EdgeInsets.all(pad),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, inner) {
-                        var side = inner.maxWidth < inner.maxHeight
-                            ? inner.maxWidth
-                            : inner.maxHeight;
-                        side *= iconScale;
-                        return Center(
-                          child: AppIcon(
-                            packageName: app.packageName,
-                            label: app.appName,
-                            size: side.clamp(8.0, double.infinity).toDouble(),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    app.appName,
-                    maxLines: maxLines,
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: fontSize,
-                      fontWeight: FontWeight.w600,
-                      height: 1.1,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      ),
+    final ink = InkWell(
+      onTap: editable
+          ? () => _showTileMenu(context)
+          : () => launchApp(context, app.packageName),
+      onLongPress: editable ? null : () => _showTileMenu(context),
+      child: _inner(context, glass: glass),
     );
+
+    final Widget tappable;
+    if (glass) {
+      // Frosted, translucent tile: the blurred board backdrop shows through a
+      // low-alpha gradient tinted with this app's color.
+      tappable = ClipRRect(
+        borderRadius: radius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              gradient: _glassGradient(theme, color),
+              border: Border.all(
+                color: Colors.white.withValues(
+                  alpha: theme.brightness == Brightness.dark ? 0.16 : 0.5,
+                ),
+              ),
+            ),
+            child: Material(type: MaterialType.transparency, child: ink),
+          ),
+        ),
+      );
+    } else {
+      tappable = Material(
+        color: color,
+        borderRadius: radius,
+        clipBehavior: Clip.antiAlias,
+        child: ink,
+      );
+    }
+
     if (editable) {
       return Stack(
         children: [
@@ -1286,9 +1326,11 @@ class _Tile extends StatelessWidget {
             child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: radius,
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.85),
+                    color: glass
+                        ? scheme.primary.withValues(alpha: 0.85)
+                        : Colors.white.withValues(alpha: 0.85),
                     width: 1.5,
                   ),
                 ),
@@ -1302,6 +1344,98 @@ class _Tile extends StatelessWidget {
     // No visible overflow button: the menu is opened by long-pressing (browse
     // mode) or tapping (edit mode).
     return tappable;
+  }
+
+  /// Translucent gradient for the frosted (通透) tile fill. Composites a
+  /// low-alpha tint of the app color over the theme surface so it stays milky
+  /// rather than fully transparent.
+  LinearGradient _glassGradient(ThemeData theme, Color tint) {
+    final dark = theme.brightness == Brightness.dark;
+    final surface = theme.colorScheme.surface;
+    Color fill(double tintA, double baseA) => Color.alphaBlend(
+          tint.withValues(alpha: tintA),
+          surface.withValues(alpha: baseA),
+        );
+    return LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        fill(dark ? 0.30 : 0.24, dark ? 0.55 : 0.62),
+        fill(dark ? 0.14 : 0.10, dark ? 0.42 : 0.50),
+      ],
+    );
+  }
+
+  Widget _inner(BuildContext context, {required bool glass}) {
+    final scheme = Theme.of(context).colorScheme;
+    final labelColor = glass ? scheme.onSurface : Colors.white;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final h = constraints.maxHeight;
+        final shortest = w < h ? w : h;
+        final pad = (shortest * 0.07).clamp(3.0, 18.0).toDouble();
+        final showLabel = h > 46;
+        // Multi-cell tiles get a slightly smaller icon so it does not look
+        // oversized; 1xN tiles keep filling the space.
+        final iconScale = (tile.w >= 2 && tile.h >= 2) ? 0.8 : 1.0;
+
+        if (!showLabel) {
+          return Padding(
+            padding: EdgeInsets.all(pad),
+            child: Center(
+              child: AppIcon(
+                packageName: app.packageName,
+                label: app.appName,
+                size: (shortest - pad * 2)
+                    .clamp(8.0, double.infinity)
+                    .toDouble(),
+              ),
+            ),
+          );
+        }
+
+        final maxLines = h >= 120 ? 2 : 1;
+        final fontSize = (shortest * 0.15).clamp(10.0, 16.0).toDouble();
+        return Padding(
+          padding: EdgeInsets.all(pad),
+          child: Column(
+            children: [
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, inner) {
+                    var side = inner.maxWidth < inner.maxHeight
+                        ? inner.maxWidth
+                        : inner.maxHeight;
+                    side *= iconScale;
+                    return Center(
+                      child: AppIcon(
+                        packageName: app.packageName,
+                        label: app.appName,
+                        size: side.clamp(8.0, double.infinity).toDouble(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                app.appName,
+                maxLines: maxLines,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: labelColor,
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w600,
+                  height: 1.1,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Widget _feedback(double width, double height, Widget child) {

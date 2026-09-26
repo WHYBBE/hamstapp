@@ -71,6 +71,28 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => showThemeColorPicker(context, state),
           ),
           ListTile(
+            leading: Icon(_tileStyleIcon(state.tileStyle)),
+            title: Text(context.strings.t('磁贴样式')),
+            subtitle: Text(_tileStyleLabel(context.strings, state.tileStyle)),
+            trailing: DropdownButton<TileStyle>(
+              value: state.tileStyle,
+              underline: const SizedBox.shrink(),
+              onChanged: (v) {
+                if (v != null) state.setTileStyle(v);
+              },
+              items: [
+                DropdownMenuItem(
+                  value: TileStyle.colorful,
+                  child: Text(context.strings.t('多彩')),
+                ),
+                DropdownMenuItem(
+                  value: TileStyle.glass,
+                  child: Text(context.strings.t('通透')),
+                ),
+              ],
+            ),
+          ),
+          ListTile(
             leading: const Icon(Icons.translate_outlined),
             title: Text(context.strings.t('语言')),
             subtitle: Text(_languageLabel(context.strings, state.language)),
@@ -256,6 +278,24 @@ String _themeModeLabel(AppStrings s, AppThemeMode mode) {
       return s.t('始终使用浅色');
     case AppThemeMode.dark:
       return s.t('始终使用深色');
+  }
+}
+
+String _tileStyleLabel(AppStrings s, TileStyle style) {
+  switch (style) {
+    case TileStyle.colorful:
+      return s.t('每个应用一种纯色，醒目活泼');
+    case TileStyle.glass:
+      return s.t('毛玻璃半透明，轻盈通透');
+  }
+}
+
+IconData _tileStyleIcon(TileStyle style) {
+  switch (style) {
+    case TileStyle.colorful:
+      return Icons.grid_view_rounded;
+    case TileStyle.glass:
+      return Icons.blur_on;
   }
 }
 
