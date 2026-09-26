@@ -197,6 +197,8 @@ const Map<String, String> _en = <String, String>{
   '新增磁贴默认大小': 'Default size for new tiles',
   '显示应用名称': 'Show app name',
   '关闭后磁贴只显示图标': 'When off, the tile shows only its icon',
+  '内边距': 'Inner padding',
+  '关闭后内容填满磁贴': 'When off, content fills the tile',
   '分类排序': 'Category order',
   '分类名称': 'Category name',
   '选择一个预设色，或自定义任意颜色':

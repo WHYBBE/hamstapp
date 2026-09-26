@@ -19,6 +19,11 @@ class Tile {
   /// icon-only (1x1 tiles already hide the label regardless of this).
   bool showLabel;
 
+  /// Whether the tile keeps an inner margin around its content. When false the
+  /// icon/label fill the tile edge-to-edge; together with [showLabel] off this
+  /// yields a single large, full-bleed icon.
+  bool innerPadding;
+
   Tile({
     required this.id,
     required this.packageName,
@@ -28,6 +33,7 @@ class Tile {
     this.w = 1,
     this.h = 1,
     this.showLabel = true,
+    this.innerPadding = true,
   });
 
   factory Tile.fromMap(Map<String, dynamic> map) => Tile(
@@ -39,6 +45,7 @@ class Tile {
         w: map['w'] as int? ?? 1,
         h: map['h'] as int? ?? 1,
         showLabel: map['showLabel'] as bool? ?? true,
+        innerPadding: map['innerPadding'] as bool? ?? true,
       );
 
   Map<String, dynamic> toMap() => {
@@ -50,5 +57,6 @@ class Tile {
         'w': w,
         'h': h,
         'showLabel': showLabel,
+        'innerPadding': innerPadding,
       };
 }

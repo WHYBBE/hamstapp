@@ -1312,7 +1312,11 @@ class _Tile extends StatelessWidget {
         final w = constraints.maxWidth;
         final h = constraints.maxHeight;
         final shortest = w < h ? w : h;
-        final pad = (shortest * 0.07).clamp(3.0, 18.0).toDouble();
+        // Per-tile inner margin; dropping it lets the content (a big icon when
+        // the label is hidden too) fill the whole tile.
+        final pad = tile.innerPadding
+            ? (shortest * 0.07).clamp(3.0, 18.0).toDouble()
+            : 0.0;
         // Tiles shorter than the label height never fit text; the per-tile
         // flag additionally lets any tile be icon-only.
         final showLabel = tile.showLabel && h > 46;
@@ -1412,6 +1416,13 @@ class _Tile extends StatelessWidget {
                   subtitle: Text(context.strings.t('关闭后磁贴只显示图标')),
                   value: state.tileById(tile.id)?.showLabel ?? true,
                   onChanged: (v) => state.setTileShowLabel(tile.id, v),
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.crop_free),
+                  title: Text(context.strings.t('内边距')),
+                  subtitle: Text(context.strings.t('关闭后内容填满磁贴')),
+                  value: state.tileById(tile.id)?.innerPadding ?? true,
+                  onChanged: (v) => state.setTileInnerPadding(tile.id, v),
                 ),
                 ListTile(
                   leading: const Icon(Icons.info_outline),

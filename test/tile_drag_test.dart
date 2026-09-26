@@ -304,6 +304,51 @@ void main() {
     );
   });
 
+  testWidgets('turning off inner padding lets the icon fill the tile', (
+    tester,
+  ) async {
+    final state = AppState(_MemStorage())
+      ..initialized = true
+      ..apps = [_ai('com.a', 'Alpha')]
+      ..tilePages = [TilePage(id: 'p1', name: 'P1', createdAt: 0)]
+      ..tiles = [
+        Tile(
+          id: 't1',
+          packageName: 'com.a',
+          pageId: 'p1',
+          col: 0,
+          row: 0,
+          w: 2,
+          h: 2,
+        ),
+      ]
+      ..currentTilePageIndex = 0;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: state,
+        child: const MaterialApp(home: QuickLaunchScreen()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final tile = find.byKey(const ValueKey('t1'));
+    final icon = find.descendant(of: tile, matching: find.byType(AppIcon));
+
+    // Icon-only with the default inner margin.
+    await state.setTileShowLabel('t1', false);
+    await tester.pump();
+    final padded = tester.widget<AppIcon>(icon).size;
+
+    // Dropping the margin makes the icon grow to fill the tile.
+    await state.setTileInnerPadding('t1', false);
+    await tester.pump();
+    final full = tester.widget<AppIcon>(icon).size;
+
+    expect(full, greaterThan(padded));
+    expect(full, closeTo(tester.getSize(tile).shortestSide, 0.5));
+  });
+
   testWidgets('category screen can add an app to the category', (tester) async {
     final cat = AppCategory(id: 'c1', name: '工具', emoji: '🛠');
     final state = AppState(_MemStorage())

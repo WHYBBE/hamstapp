@@ -1073,6 +1073,15 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Toggle whether a tile keeps an inner margin around its content.
+  Future<void> setTileInnerPadding(String tileId, bool value) async {
+    final tile = tileById(tileId);
+    if (tile == null || tile.innerPadding == value) return;
+    tile.innerPadding = value;
+    await _persistTiles();
+    notifyListeners();
+  }
+
   /// Change a tile's size (width 1..kTileCols, height 1..kTileMaxH), relocating
   /// if needed. [cols] is the board's current column count.
   Future<void> setTileSize(

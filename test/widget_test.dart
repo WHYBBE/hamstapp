@@ -412,22 +412,26 @@ void main() {
     expect(reopened.tileStyle, TileStyle.glass);
   });
 
-  test('tile showLabel defaults and round-trips through the model', () {
+  test('tile display flags default and round-trip through the model', () {
     final t = Tile(
       id: 't1',
       packageName: 'com.a',
       pageId: 'p1',
       showLabel: false,
+      innerPadding: false,
     );
-    expect(Tile.fromMap(t.toMap()).showLabel, isFalse);
+    final back = Tile.fromMap(t.toMap());
+    expect(back.showLabel, isFalse);
+    expect(back.innerPadding, isFalse);
 
-    // Missing key (older backups) defaults to showing the label.
+    // Missing keys (older backups) default to the classic labelled/padded tile.
     final legacy = Tile.fromMap({
       'id': 't2',
       'packageName': 'com.a',
       'pageId': 'p1',
     });
     expect(legacy.showLabel, isTrue);
+    expect(legacy.innerPadding, isTrue);
   });
 
   test('language setting resolves and translates', () async {
