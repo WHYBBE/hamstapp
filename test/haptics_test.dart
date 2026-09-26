@@ -1,0 +1,127 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+
+import 'package:hamstapp/models/app_info.dart';
+import 'package:hamstapp/models/tile_page.dart';
+import 'package:hamstapp/screens/quick_launch_screen.dart';
+import 'package:hamstapp/services/storage.dart';
+import 'package:hamstapp/state/app_state.dart';
+
+class _MemStorage implements Storage {
+  final Map<String, dynamic> _data = <String, dynamic>{};
+  @override
+  Future<dynamic> readJson(String name) async => _data[name];
+  @override
+  Future<void> writeJson(String name, dynamic data) async {
+    _data[name] = data;
+  }
+}
+
+AppInfo _ai(String pkg, String name) => AppInfo(
+  packageName: pkg,
+  appName: name,
+  versionName: '1',
+  versionCode: 1,
+  firstInstallTime: 0,
+  lastUpdateTime: 0,
+  isSystem: false,
+  enabled: true,
+  apkPath: '',
+  sizeBytes: 0,
+  targetSdk: 33,
+  minSdk: 21,
+  uid: 0,
+);
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  const channel = MethodChannel('hamstapp/apps');
+  var vibrates = 0;
+
+  setUp(() {
+    vibrates = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'vibrate') vibrates++;
+      return null;
+    });
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null);
+  });
+
+  testWidgets('swiping launch sub-tabs vibrates while dragging', (tester) async {
+    final state = AppState(_MemStorage())
+      ..initialized = true
+      ..apps = [_ai('com.a', 'A')];
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: state,
+        child: const MaterialApp(home: QuickLaunchScreen()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(vibrates, 0);
+
+    // Drag the pager from the first sub-tab to the next one.
+    await tester.drag(find.byType(TabBarView), const Offset(-500, 0));
+    await tester.pump();
+
+    expect(
+      vibrates,
+      greaterThan(0),
+      reason: 'a sub-tab swipe should tick while dragging',
+    );
+  });
+
+  testWidgets('tapping launch sub-tabs vibrates', (tester) async {
+    final state = AppState(_MemStorage())
+      ..initialized = true
+      ..apps = [_ai('com.a', 'A')];
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: state,
+        child: const MaterialApp(home: QuickLaunchScreen()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.tap(find.text('分类'));
+    await tester.pump();
+
+    expect(vibrates, greaterThan(0));
+  });
+
+  testWidgets('swiping tile pages vibrates while dragging', (tester) async {
+    final state = AppState(_MemStorage())
+      ..initialized = true
+      ..apps = [_ai('com.a', 'A')]
+      ..tilePages = [
+        TilePage(id: 'p1', name: 'P1', createdAt: 0),
+        TilePage(id: 'p2', name: 'P2', createdAt: 0),
+      ]
+      ..currentTilePageIndex = 0;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: state,
+        child: const MaterialApp(home: QuickLaunchScreen()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // Swipe the tile board (the inner pager, the last PageView) to page 2.
+    await tester.drag(find.byType(PageView).last, const Offset(-500, 0));
+    await tester.pump();
+
+    expect(vibrates, greaterThan(0));
+  });
+}

@@ -56,24 +56,25 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
     setState(() {});
   }
 
-  /// Fires the haptic as soon as a swipe is released (not after it settles),
-  /// so the feedback lands on the decision, matching the snappy tap feel.
+  /// Fires the haptic the moment a swipe predicts a different tab (crossing
+  /// the midpoint), not after the page settles. `ScrollEndNotification` only
+  /// arrives once the snap animation is done, which felt late.
   bool _onTabsScroll(ScrollNotification n) {
     // depth 0 = this TabBarView's own pager; deeper notifications come from
     // scroll views inside a tab (e.g. the tile board) and must be ignored.
     if (n.depth != 0 || n.metrics.axis != Axis.horizontal) return false;
     if (n is ScrollStartNotification) {
       _draggingTabs = n.dragDetails != null;
-    } else if (n is ScrollEndNotification && _draggingTabs) {
-      _draggingTabs = false;
+    } else if (n is ScrollUpdateNotification && _draggingTabs) {
       final vp = n.metrics.viewportDimension;
-      if (vp > 0) {
-        final nearest = (n.metrics.pixels / vp).round().clamp(0, 3);
-        if (nearest != _lastHapticTab) {
-          _lastHapticTab = nearest;
-          context.read<AppState>().haptic(HapticTrigger.launchTabs);
-        }
+      if (vp <= 0) return false;
+      final nearest = (n.metrics.pixels / vp).round().clamp(0, 3);
+      if (nearest != _lastHapticTab) {
+        _lastHapticTab = nearest;
+        context.read<AppState>().haptic(HapticTrigger.launchTabs);
       }
+    } else if (n is ScrollEndNotification) {
+      _draggingTabs = false;
     }
     return false;
   }
@@ -385,24 +386,24 @@ class _TilesTabState extends State<_TilesTab> {
     if (stateChanged) widget.state.setCurrentTilePage(i);
   }
 
-  /// Ticks as soon as a page swipe is released rather than after it settles.
+  /// Ticks the moment a page swipe predicts a different page (crossing the
+  /// midpoint), rather than waiting for the snap animation to finish.
   bool _onPagesScroll(ScrollNotification n) {
     if (n.depth != 0 || n.metrics.axis != Axis.horizontal) return false;
     if (n is ScrollStartNotification) {
       _draggingPages = n.dragDetails != null;
-    } else if (n is ScrollEndNotification && _draggingPages) {
-      _draggingPages = false;
+    } else if (n is ScrollUpdateNotification && _draggingPages) {
       final vp = n.metrics.viewportDimension;
-      if (vp > 0) {
-        final pages = widget.state.tilePages.length;
-        final nearest = pages == 0
-            ? 0
-            : (n.metrics.pixels / vp).round().clamp(0, pages - 1);
-        if (nearest != _lastHapticPage) {
-          _lastHapticPage = nearest;
-          widget.state.haptic(HapticTrigger.tilePages);
-        }
+      if (vp <= 0) return false;
+      final pages = widget.state.tilePages.length;
+      final nearest =
+          pages == 0 ? 0 : (n.metrics.pixels / vp).round().clamp(0, pages - 1);
+      if (nearest != _lastHapticPage) {
+        _lastHapticPage = nearest;
+        widget.state.haptic(HapticTrigger.tilePages);
       }
+    } else if (n is ScrollEndNotification) {
+      _draggingPages = false;
     }
     return false;
   }
