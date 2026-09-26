@@ -109,6 +109,7 @@ class NativeApps {
     required String rel,
     required int size,
     required int modified,
+    bool force = false,
     void Function(int received, int total)? onProgress,
   }) async {
     _ensureProgressHandler();
@@ -123,6 +124,7 @@ class NativeApps {
         'rel': rel,
         'size': size,
         'modified': modified,
+        'force': force,
         'downloadId': id,
       });
       if (path == null || path.isEmpty) {
@@ -158,6 +160,15 @@ class NativeApps {
     final freed = await _channel.invokeMethod<num>('cachePrune', {
       'sourceId': sourceId,
       'entries': entries,
+    });
+    return freed?.toInt() ?? 0;
+  }
+
+  /// Deletes one cached APK (source + remote path). Returns freed bytes.
+  static Future<int> cacheDelete(String sourceId, String remotePath) async {
+    final freed = await _channel.invokeMethod<num>('cacheDelete', {
+      'sourceId': sourceId,
+      'remotePath': remotePath,
     });
     return freed?.toInt() ?? 0;
   }

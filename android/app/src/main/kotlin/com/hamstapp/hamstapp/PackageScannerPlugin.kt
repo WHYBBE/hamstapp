@@ -182,6 +182,15 @@ class PackageScannerPlugin(
                     mainHandler.post { result.success(freed) }
                 }
             }
+            "cacheDelete" -> {
+                val sourceId = call.argument<String>("sourceId") ?: "default"
+                val remotePath = call.argument<String>("remotePath") ?: ""
+                executor.execute {
+                    val freed = runCatching { cacheDelete(sourceId, remotePath) }
+                        .getOrDefault(0L)
+                    mainHandler.post { result.success(freed) }
+                }
+            }
             "cacheClear" -> executor.execute {
                 val freed = runCatching { cacheClear() }.getOrDefault(0L)
                 mainHandler.post { result.success(freed) }
@@ -559,6 +568,7 @@ class PackageScannerPlugin(
         val rel = strArg(config, "rel", name)
         val remoteSize = longArg(config, "size", -1L)
         val remoteModified = longArg(config, "modified", 0L)
+        val force = boolArg(config, "force")
         val key = cacheKey(sourceId, remotePath)
 
         val cache = loadCache()
@@ -566,9 +576,17 @@ class PackageScannerPlugin(
         if (existing != null) {
             val local = File(cacheDir(), existing.optString("file"))
             val cachedSize = existing.optLong("size", -1L)
-            val same = local.exists() && (remoteSize < 0 || cachedSize == remoteSize)
-            if (same) return local.absolutePath
-            // Remote changed (or file vanished): drop the stale cache entry.
+            val cachedModified = existing.optLong("modified", 0L)
+            // Size alone misses replacements of the same length, so also compare
+            // the remote mtime when both sides know it.
+            val sizeSame = remoteSize < 0 || cachedSize == remoteSize
+            val modifiedSame = remoteModified <= 0 ||
+                cachedModified <= 0 ||
+                cachedModified == remoteModified
+            if (!force && local.exists() && sizeSame && modifiedSame) {
+                return local.absolutePath
+            }
+            // Remote changed (or a refresh was forced): drop the stale copy.
             local.delete()
             val oldIcon = existing.optString("icon")
             if (oldIcon.isNotEmpty()) runCatching { File(cacheDir(), oldIcon).delete() }
@@ -841,6 +859,7 @@ class PackageScannerPlugin(
                     "localPath" to file.absolutePath,
                     "iconPath" to if (iconFile.exists()) iconFile.absolutePath else "",
                     "size" to file.length(),
+                    "modified" to obj.optLong("modified", 0L),
                     "packageName" to obj.optString("packageName"),
                     "appName" to obj.optString("appName"),
                     "versionName" to obj.optString("versionName"),
@@ -859,11 +878,11 @@ class PackageScannerPlugin(
      */
     private fun cachePrune(sourceId: String, payload: Map<*, *>): Long {
         val list = payload["entries"] as? List<*> ?: return 0L
-        val remotes = HashMap<String, Long>()
+        val remotes = HashMap<String, Pair<Long, Long>>()
         for (item in list) {
             val m = item as? Map<*, *> ?: continue
             val p = (m["path"] as? String) ?: continue
-            remotes[p] = longArg(m, "size", -1L)
+            remotes[p] = longArg(m, "size", -1L) to longArg(m, "modified", 0L)
         }
         val cache = loadCache()
         var freed = 0L
@@ -874,7 +893,14 @@ class PackageScannerPlugin(
             val remotePath = key.substring(prefix.length)
             val obj = cache.optJSONObject(key) ?: continue
             val remote = remotes[remotePath]
-            val fresh = remote != null && (remote < 0 || obj.optLong("size", -1L) == remote)
+            val remoteSize = remote?.first ?: -2L
+            val remoteModified = remote?.second ?: 0L
+            val cachedSize = obj.optLong("size", -1L)
+            val cachedModified = obj.optLong("modified", 0L)
+            val fresh = remote != null &&
+                (remoteSize < 0 || cachedSize == remoteSize) &&
+                (remoteModified <= 0 || cachedModified <= 0 ||
+                    cachedModified == remoteModified)
             if (fresh) continue
             val file = File(cacheDir(), obj.optString("file"))
             if (file.exists() && file.delete()) freed += obj.optLong("size", 0L)
@@ -882,6 +908,23 @@ class PackageScannerPlugin(
             if (icon.isNotEmpty()) runCatching { File(cacheDir(), icon).delete() }
             cache.remove(key)
         }
+        saveCache(cache)
+        return freed
+    }
+
+    /** Deletes a single cached APK (by source + remote path). Returns freed bytes. */
+    private fun cacheDelete(sourceId: String, remotePath: String): Long {
+        if (remotePath.isEmpty()) return 0L
+        val cache = loadCache()
+        val key = cacheKey(sourceId, remotePath)
+        var freed = 0L
+        cache.optJSONObject(key)?.let { obj ->
+            val file = File(cacheDir(), obj.optString("file"))
+            if (file.exists() && file.delete()) freed += obj.optLong("size", 0L)
+            val icon = obj.optString("icon")
+            if (icon.isNotEmpty()) runCatching { File(cacheDir(), icon).delete() }
+        }
+        cache.remove(key)
         saveCache(cache)
         return freed
     }

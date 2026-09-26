@@ -32,9 +32,13 @@ class RemoteClient {
 
   /// Downloads one listed entry (or reuses the cached copy) and returns the
   /// local file path. Reports throughput via [onProgress] when provided.
+  ///
+  /// Pass [force] to re-download and re-parse even when an up-to-date cached
+  /// copy exists (used to pick up a replaced APK).
   static Future<String> download(
     RemoteSource source,
     Map<String, dynamic> entry, {
+    bool force = false,
     void Function(int received, int total)? onProgress,
   }) {
     final name = (entry['name'] as String?) ?? 'download.apk';
@@ -46,6 +50,7 @@ class RemoteClient {
       rel: (entry['rel'] as String?) ?? name,
       size: (entry['size'] as num?)?.toInt() ?? 0,
       modified: (entry['modified'] as num?)?.toInt() ?? 0,
+      force: force,
       onProgress: onProgress,
     );
   }
@@ -64,15 +69,26 @@ class RemoteClient {
     return out;
   }
 
-  /// Drops cached APKs whose remote file changed or disappeared.
+  /// Drops cached APKs whose remote file changed (size or mtime) or disappeared.
   static Future<int> pruneCache(
       RemoteSource source, List<Map<String, dynamic>> files) {
     return NativeApps.cachePrune(
       source.id,
       files
-          .map((f) => {'path': f['path'], 'size': f['size']})
+          .map((f) => {
+                'path': f['path'],
+                'size': f['size'],
+                'modified': f['modified'],
+              })
           .toList(growable: false),
     );
+  }
+
+  /// Deletes one cached APK so the next fetch re-downloads it. Returns freed
+  /// bytes.
+  static Future<int> deleteCache(RemoteSource source, String remotePath) {
+    if (remotePath.isEmpty) return Future.value(0);
+    return NativeApps.cacheDelete(source.id, remotePath);
   }
 
   /// Deletes the whole download cache. Returns freed bytes.

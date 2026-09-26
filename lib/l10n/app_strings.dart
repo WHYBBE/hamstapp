@@ -151,6 +151,13 @@ const Map<String, String> _en = <String, String>{
       'Tap ➕ to pick apps to pin.\nLong-press to move, drag the corner to resize.',
   '点击安装，长按可先下载解析 APK 信息（名称/版本/包名）':
       'Tap to install; long-press to download and parse its APK info first (name / version / package).',
+  '点击安装；长按或 ⋮ 可获取信息、忽略缓存重新获取或删除单项缓存':
+      'Tap to install; long-press or ⋮ to load info, refresh ignoring cache, or delete a single cache entry.',
+  '获取 APK 信息': 'Load APK info',
+  '刷新 APK 信息': 'Refresh APK info',
+  '忽略缓存重新获取': 'Re-fetch (ignore cache)',
+  '删除该项缓存': 'Delete this cache',
+  '已删除该项缓存（{size}）': 'Removed cache ({size})',
   '请先点击右上角「完成」结束磁贴编辑': 'Tap Done first to finish editing tiles.',
 
   // ---- tabs / sections

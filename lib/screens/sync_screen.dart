@@ -286,6 +286,13 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
     }
   }
 
+  static int _cacheBytesOf(Map<String, Map<String, dynamic>> cache) => cache
+      .values
+      .fold(0, (sum, e) => sum + ((e['size'] as num?)?.toInt() ?? 0));
+
+  static String _keyOf(Map<String, dynamic> f) =>
+      (f['path'] as String?) ?? (f['name'] as String? ?? '');
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -293,7 +300,7 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
     });
     try {
       final files = await RemoteClient.list(widget.source);
-      // Drop cached copies whose remote file changed or disappeared.
+      // Drop cached copies whose remote file changed (size/mtime) or vanished.
       try {
         await RemoteClient.pruneCache(widget.source, files);
       } catch (_) {}
@@ -302,10 +309,7 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
       setState(() {
         _files = files;
         _cache = cache;
-        _cacheBytes = cache.values.fold(
-          0,
-          (sum, e) => sum + ((e['size'] as num?)?.toInt() ?? 0),
-        );
+        _cacheBytes = _cacheBytesOf(cache);
         _loading = false;
       });
     } catch (e) {
@@ -324,9 +328,12 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
       ..showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  Future<void> _install(Map<String, dynamic> f) async {
-    final s = context.strings;
-    final key = (f['path'] as String?) ?? (f['name'] as String? ?? '');
+  /// Downloads [f] (or reuses the cached copy unless [force]) while showing
+  /// progress, then refreshes this entry's metadata/icon. Returns the local
+  /// path, or rethrows on failure.
+  Future<String> _downloadFile(Map<String, dynamic> f,
+      {bool force = false}) async {
+    final key = _keyOf(f);
     setState(() {
       _installing.add(key);
       _progress[key] = 0;
@@ -335,6 +342,7 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
       final local = await RemoteClient.download(
         widget.source,
         f,
+        force: force,
         onProgress: (received, total) {
           if (!mounted || !_installing.contains(key)) return;
           setState(() {
@@ -343,15 +351,8 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
           });
         },
       );
-      // Refresh this entry's metadata/icon from the (now populated) cache.
       await _refreshCache();
-      final ok = await NativeApps.installApk(local);
-      if (!ok) throw StateError(s.t('无法调起系统安装器'));
-      _snack(
-        s.t('已交给系统安装器：{path}', {'path': f['name']}),
-      );
-    } catch (e) {
-      _snack(s.t('安装失败：{error}', {'error': e}));
+      return local;
     } finally {
       if (mounted) {
         setState(() {
@@ -362,40 +363,37 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
     }
   }
 
-  /// Downloads and parses an APK (without installing) so its full metadata
-  /// and icon become visible in the list.
-  Future<void> _fetchInfo(Map<String, dynamic> f) async {
+  Future<void> _install(Map<String, dynamic> f) async {
     final s = context.strings;
-    final key = (f['path'] as String?) ?? (f['name'] as String? ?? '');
-    if (_installing.contains(key)) return;
-    setState(() {
-      _installing.add(key);
-      _progress[key] = 0;
-    });
     try {
-      await RemoteClient.download(
-        widget.source,
-        f,
-        onProgress: (received, total) {
-          if (!mounted || !_installing.contains(key)) return;
-          setState(() {
-            _progress[key] =
-                total > 0 ? (received / total).clamp(0.0, 1.0) : null;
-          });
-        },
-      );
-      await _refreshCache();
+      final local = await _downloadFile(f);
+      final ok = await NativeApps.installApk(local);
+      if (!ok) throw StateError(s.t('无法调起系统安装器'));
+      _snack(s.t('已交给系统安装器：{path}', {'path': f['name']}));
+    } catch (e) {
+      _snack(s.t('安装失败：{error}', {'error': e}));
+    }
+  }
+
+  /// Downloads and parses an APK (without installing) so its full metadata
+  /// and icon become visible in the list. [force] ignores any cached copy.
+  Future<void> _fetchInfo(Map<String, dynamic> f, {bool force = false}) async {
+    final s = context.strings;
+    if (_installing.contains(_keyOf(f))) return;
+    try {
+      await _downloadFile(f, force: force);
       _snack(s.t('已获取 APK 信息'));
     } catch (e) {
       _snack(s.t('获取信息失败：{error}', {'error': e}));
-    } finally {
-      if (mounted) {
-        setState(() {
-          _installing.remove(key);
-          _progress.remove(key);
-        });
-      }
     }
+  }
+
+  /// Drops the cached copy of a single APK; the next fetch downloads it again.
+  Future<void> _deleteCache(Map<String, dynamic> f) async {
+    final s = context.strings;
+    final freed = await RemoteClient.deleteCache(widget.source, _keyOf(f));
+    await _refreshCache();
+    _snack(s.t('已删除该项缓存（{size}）', {'size': Fmt.size(freed)}));
   }
 
   Future<void> _refreshCache() async {
@@ -403,10 +401,7 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
     if (!mounted) return;
     setState(() {
       _cache = cache;
-      _cacheBytes = cache.values.fold(
-        0,
-        (sum, e) => sum + ((e['size'] as num?)?.toInt() ?? 0),
-      );
+      _cacheBytes = _cacheBytesOf(cache);
     });
   }
 
@@ -543,12 +538,18 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
                   height: 22,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : IconButton(
-                  tooltip: installed == null
-                      ? context.strings.t('安装')
-                      : context.strings.t('更新'),
-                  icon: const Icon(Icons.download_for_offline_outlined),
-                  onPressed: () => _install(f),
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: installed == null
+                          ? context.strings.t('安装')
+                          : context.strings.t('更新'),
+                      icon: const Icon(Icons.download_for_offline_outlined),
+                      onPressed: () => _install(f),
+                    ),
+                    _itemMenu(f, cached: meta != null),
+                  ],
                 ),
           onTap: installing ? null : () => _install(f),
           onLongPress: installing ? null : () => _fetchInfo(f),
@@ -592,6 +593,52 @@ class _SyncSourceTabState extends State<_SyncSourceTab>
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 3,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _itemMenu(Map<String, dynamic> f, {required bool cached}) {
+    final s = context.strings;
+    return PopupMenuButton<String>(
+      tooltip: s.t('更多'),
+      icon: const Icon(Icons.more_vert),
+      onSelected: (v) {
+        switch (v) {
+          case 'info':
+            _fetchInfo(f);
+          case 'refresh':
+            _fetchInfo(f, force: true);
+          case 'delete':
+            _deleteCache(f);
+        }
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: 'info',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.info_outline),
+            title: Text(s.t(cached ? '刷新 APK 信息' : '获取 APK 信息')),
+          ),
+        ),
+        if (cached)
+          PopupMenuItem(
+            value: 'refresh',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.refresh),
+              title: Text(s.t('忽略缓存重新获取')),
+            ),
+          ),
+        if (cached)
+          PopupMenuItem(
+            value: 'delete',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.delete_outline),
+              title: Text(s.t('删除该项缓存')),
             ),
           ),
       ],
@@ -714,7 +761,7 @@ class _SourceHeader extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            context.strings.t('点击安装，长按可先下载解析 APK 信息（名称/版本/包名）'),
+            context.strings.t('点击安装；长按或 ⋮ 可获取信息、忽略缓存重新获取或删除单项缓存'),
             style: TextStyle(
               fontSize: 11,
               color: theme.colorScheme.onSurfaceVariant,
