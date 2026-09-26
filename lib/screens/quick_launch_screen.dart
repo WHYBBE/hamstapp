@@ -30,6 +30,11 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
   late final TabController _tabs;
   int _lastTab = 0;
 
+  /// Last tab we played a tick for, so a swipe does not double-fire when the
+  /// controller finally settles on the same index.
+  int _lastHapticTab = 0;
+  bool _draggingTabs = false;
+
   RecentSort _recentSort = RecentSort.recent;
   int _recentSince = 0;
 
@@ -42,8 +47,35 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
   void _onTabChanged() {
     if (_tabs.index == _lastTab) return;
     _lastTab = _tabs.index;
-    context.read<AppState>().haptic(HapticTrigger.launchTabs);
+    // Tapping a tab updates the index immediately; swiping settles here after
+    // the animation, by which point the drag-release handler already fired.
+    if (!_draggingTabs && _tabs.index != _lastHapticTab) {
+      _lastHapticTab = _tabs.index;
+      context.read<AppState>().haptic(HapticTrigger.launchTabs);
+    }
     setState(() {});
+  }
+
+  /// Fires the haptic as soon as a swipe is released (not after it settles),
+  /// so the feedback lands on the decision, matching the snappy tap feel.
+  bool _onTabsScroll(ScrollNotification n) {
+    // depth 0 = this TabBarView's own pager; deeper notifications come from
+    // scroll views inside a tab (e.g. the tile board) and must be ignored.
+    if (n.depth != 0 || n.metrics.axis != Axis.horizontal) return false;
+    if (n is ScrollStartNotification) {
+      _draggingTabs = n.dragDetails != null;
+    } else if (n is ScrollEndNotification && _draggingTabs) {
+      _draggingTabs = false;
+      final vp = n.metrics.viewportDimension;
+      if (vp > 0) {
+        final nearest = (n.metrics.pixels / vp).round().clamp(0, 3);
+        if (nearest != _lastHapticTab) {
+          _lastHapticTab = nearest;
+          context.read<AppState>().haptic(HapticTrigger.launchTabs);
+        }
+      }
+    }
+    return false;
   }
 
   @override
@@ -92,21 +124,24 @@ class _QuickLaunchScreenState extends State<QuickLaunchScreen>
             : tabs,
         actions: _actions(context, state, editing),
       ),
-      body: TabBarView(
-        controller: _tabs,
-        physics: editing
-            ? const NeverScrollableScrollPhysics()
-            : const PageScrollPhysics(),
-        children: [
-          _TilesTab(state: state),
-          CategoriesTab(state: state),
-          _FavoritesTab(state: state),
-          _RecentTab(
-            state: state,
-            sort: _recentSort,
-            sinceMillis: _recentSince,
-          ),
-        ],
+      body: NotificationListener<ScrollNotification>(
+        onNotification: _onTabsScroll,
+        child: TabBarView(
+          controller: _tabs,
+          physics: editing
+              ? const NeverScrollableScrollPhysics()
+              : const PageScrollPhysics(),
+          children: [
+            _TilesTab(state: state),
+            CategoriesTab(state: state),
+            _FavoritesTab(state: state),
+            _RecentTab(
+              state: state,
+              sort: _recentSort,
+              sinceMillis: _recentSince,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -285,6 +320,8 @@ class _TilesTab extends StatefulWidget {
 class _TilesTabState extends State<_TilesTab> {
   late final PageController _controller;
   int _index = 0;
+  int _lastHapticPage = 0;
+  bool _draggingPages = false;
 
   int _clamp(int i) {
     final n = widget.state.tilePages.length;
@@ -301,6 +338,7 @@ class _TilesTabState extends State<_TilesTab> {
     // this tab was rebuilt, e.g. after switching the top-level tab).
     _index = _clamp(widget.state.currentTilePageIndex);
     widget.state.currentTilePageIndex = _index;
+    _lastHapticPage = _index;
     _controller = PageController(initialPage: _index);
   }
 
@@ -337,9 +375,36 @@ class _TilesTabState extends State<_TilesTab> {
     final stateChanged = widget.state.currentTilePageIndex != i;
     final localChanged = _index != i;
     if (!stateChanged && !localChanged) return;
-    widget.state.haptic(HapticTrigger.tilePages);
+    // Chip taps land here immediately; swipe settles land here after the
+    // animation, but the drag-release handler has already ticked by then.
+    if (!_draggingPages && i != _lastHapticPage) {
+      _lastHapticPage = i;
+      widget.state.haptic(HapticTrigger.tilePages);
+    }
     if (localChanged) setState(() => _index = i);
     if (stateChanged) widget.state.setCurrentTilePage(i);
+  }
+
+  /// Ticks as soon as a page swipe is released rather than after it settles.
+  bool _onPagesScroll(ScrollNotification n) {
+    if (n.depth != 0 || n.metrics.axis != Axis.horizontal) return false;
+    if (n is ScrollStartNotification) {
+      _draggingPages = n.dragDetails != null;
+    } else if (n is ScrollEndNotification && _draggingPages) {
+      _draggingPages = false;
+      final vp = n.metrics.viewportDimension;
+      if (vp > 0) {
+        final pages = widget.state.tilePages.length;
+        final nearest = pages == 0
+            ? 0
+            : (n.metrics.pixels / vp).round().clamp(0, pages - 1);
+        if (nearest != _lastHapticPage) {
+          _lastHapticPage = nearest;
+          widget.state.haptic(HapticTrigger.tilePages);
+        }
+      }
+    }
+    return false;
   }
 
   @override
@@ -358,15 +423,18 @@ class _TilesTabState extends State<_TilesTab> {
     return Column(
       children: [
         Expanded(
-          child: PageView.builder(
-            controller: _controller,
-            physics: state.tileEditMode
-                ? const NeverScrollableScrollPhysics()
-                : const PageScrollPhysics(),
-            itemCount: pages.length,
-            onPageChanged: _setIndex,
-            itemBuilder: (context, i) =>
-                _TileBoard(state: state, page: pages[i]),
+          child: NotificationListener<ScrollNotification>(
+            onNotification: _onPagesScroll,
+            child: PageView.builder(
+              controller: _controller,
+              physics: state.tileEditMode
+                  ? const NeverScrollableScrollPhysics()
+                  : const PageScrollPhysics(),
+              itemCount: pages.length,
+              onPageChanged: _setIndex,
+              itemBuilder: (context, i) =>
+                  _TileBoard(state: state, page: pages[i]),
+            ),
           ),
         ),
         _PageBar(
