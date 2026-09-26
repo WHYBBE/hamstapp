@@ -542,25 +542,6 @@ class _TileBoardState extends State<_TileBoard> {
                 // active Draggable and cancels the move. So the highlight slot is
                 // always present in edit mode and only its content toggles.
                 children: [
-                  // Soft tinted blobs painted behind the tiles so the frosted
-                  // (通透) tiles have something to blur, giving real depth.
-                  if (glass)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: RepaintBoundary(
-                          child: CustomPaint(
-                            key: const ValueKey('glass-aura'),
-                            painter: _GlassAuraPainter(
-                              primary: scheme.primary,
-                              secondary: scheme.secondary,
-                              tertiary: scheme.tertiary,
-                              dark: Theme.of(context).brightness ==
-                                  Brightness.dark,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
                   if (editable)
                     Positioned.fill(
                       child: IgnorePointer(
@@ -873,54 +854,6 @@ class _TileGridPainter extends CustomPainter {
       old.cols != cols ||
       old.rows != rows ||
       old.color != color;
-}
-
-/// Paints a few large, very soft radial blobs behind the tile board so the
-/// frosted (通透) tiles have a non-uniform backdrop worth blurring.
-class _GlassAuraPainter extends CustomPainter {
-  _GlassAuraPainter({
-    required this.primary,
-    required this.secondary,
-    required this.tertiary,
-    required this.dark,
-  });
-
-  final Color primary;
-  final Color secondary;
-  final Color tertiary;
-  final bool dark;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final maxR = size.width > size.height ? size.width : size.height;
-    final blobs = <(Alignment, double, Color)>[
-      (const Alignment(-0.85, -0.7), 0.9, primary),
-      (const Alignment(1.0, -0.1), 0.8, tertiary),
-      (const Alignment(-0.3, 1.0), 0.85, secondary),
-    ];
-    final base = dark ? 0.40 : 0.28;
-    for (var i = 0; i < blobs.length; i++) {
-      final (align, scale, color) = blobs[i];
-      final center = align.withinRect(Offset.zero & size);
-      final radius = maxR * scale;
-      final alpha = base * (1.0 - i * 0.18);
-      final paint = Paint()
-        ..shader = RadialGradient(
-          colors: [
-            color.withValues(alpha: alpha),
-            color.withValues(alpha: 0),
-          ],
-        ).createShader(Rect.fromCircle(center: center, radius: radius));
-      canvas.drawCircle(center, radius, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _GlassAuraPainter old) =>
-      old.primary != primary ||
-      old.secondary != secondary ||
-      old.tertiary != tertiary ||
-      old.dark != dark;
 }
 
 /// Draws a small rounded corner border in the bottom-right corner.
@@ -1300,11 +1233,13 @@ class _Tile extends StatelessWidget {
       return editable ? _editFrame(tappable, radius, Colors.white) : tappable;
     }
 
-    // 通透: cheap translucency — deliberately no BackdropFilter (a blur per
-    // tile makes tab swipes janky). The tinted aura painted behind the board
-    // shows through the semi-transparent fill instead.
+    // 通透: cheap translucency. Deliberately no BackdropFilter (a blur per
+    // tile makes tab swipes janky) and no board-wide backdrop either — that
+    // would slide with the tab and make the background visibly brighten/
+    // darken while swiping. The glass look is fully self-contained per tile.
     final dark = theme.brightness == Brightness.dark;
     final tappable = DecoratedBox(
+      key: const ValueKey('glass-tile'),
       decoration: BoxDecoration(
         borderRadius: radius,
         gradient: _glassGradient(theme, color),
@@ -1346,9 +1281,10 @@ class _Tile extends StatelessWidget {
     );
   }
 
-  /// Translucent gradient for the frosted (通透) tile fill: a mostly neutral,
-  /// theme-adaptive surface with just a hint of the app color, so the tinted
-  /// aura behind reads through as clean colored glass instead of a muddy wash.
+  /// Translucent gradient for the frosted (通透) tile fill. A soft highlight
+  /// of the app color in the top-left fades into a mostly neutral, translucent
+  /// surface — a clean glass card rather than a muddy wash. Self-contained so
+  /// nothing behind the tile has to move for the effect to read.
   LinearGradient _glassGradient(ThemeData theme, Color tint) {
     final dark = theme.brightness == Brightness.dark;
     final surface = theme.colorScheme.surface;
@@ -1360,9 +1296,11 @@ class _Tile extends StatelessWidget {
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
       colors: [
-        fill(dark ? 0.14 : 0.10, dark ? 0.55 : 0.72),
-        fill(dark ? 0.06 : 0.04, dark ? 0.36 : 0.54),
+        fill(dark ? 0.34 : 0.30, dark ? 0.48 : 0.62),
+        fill(dark ? 0.10 : 0.08, dark ? 0.40 : 0.60),
+        fill(dark ? 0.05 : 0.03, dark ? 0.32 : 0.50),
       ],
+      stops: const [0.0, 0.5, 1.0],
     );
   }
 

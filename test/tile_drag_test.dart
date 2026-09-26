@@ -235,15 +235,17 @@ void main() {
 
     final tile = find.byKey(const ValueKey('t1'));
     expect(tile, findsOneWidget);
-    // The classic style has no translucent aura behind the board.
-    expect(find.byKey(const ValueKey('glass-aura')), findsNothing);
+    // The classic style has no translucent glass surface.
+    expect(find.byKey(const ValueKey('glass-tile')), findsNothing);
 
     await state.setTileStyle(TileStyle.glass);
     await tester.pump(const Duration(milliseconds: 50));
 
-    // Glass enables the tinted aura the translucent tiles show through...
-    expect(find.byKey(const ValueKey('glass-aura')), findsOneWidget);
-    // ...but must stay cheap: no per-tile backdrop blur (that janked swipes).
+    // Glass renders a self-contained translucent surface...
+    expect(find.byKey(const ValueKey('glass-tile')), findsOneWidget);
+    // ...but must stay cheap: no per-tile backdrop blur (that janked swipes),
+    // and no board-wide backdrop (that slid with the tab and changed the
+    // background brightness while swiping).
     expect(
       find.descendant(of: tile, matching: find.byType(BackdropFilter)),
       findsNothing,
