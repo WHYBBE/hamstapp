@@ -24,6 +24,10 @@ class Tile {
   /// yields a single large, full-bleed icon.
   bool innerPadding;
 
+  /// Whether the tile draws its backdrop (fill + rounded border + shadow).
+  /// When false only the content (icon and/or name) is shown, frameless.
+  bool border;
+
   Tile({
     required this.id,
     required this.packageName,
@@ -34,6 +38,7 @@ class Tile {
     this.h = 1,
     this.showLabel = true,
     this.innerPadding = true,
+    this.border = true,
   });
 
   factory Tile.fromMap(Map<String, dynamic> map) => Tile(
@@ -46,6 +51,7 @@ class Tile {
         h: map['h'] as int? ?? 1,
         showLabel: map['showLabel'] as bool? ?? true,
         innerPadding: map['innerPadding'] as bool? ?? true,
+        border: map['border'] as bool? ?? true,
       );
 
   Map<String, dynamic> toMap() => {
@@ -58,5 +64,6 @@ class Tile {
         'h': h,
         'showLabel': showLabel,
         'innerPadding': innerPadding,
+        'border': border,
       };
 }

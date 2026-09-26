@@ -419,10 +419,12 @@ void main() {
       pageId: 'p1',
       showLabel: false,
       innerPadding: false,
+      border: false,
     );
     final back = Tile.fromMap(t.toMap());
     expect(back.showLabel, isFalse);
     expect(back.innerPadding, isFalse);
+    expect(back.border, isFalse);
 
     // Missing keys (older backups) default to the classic labelled/padded tile.
     final legacy = Tile.fromMap({
@@ -432,6 +434,7 @@ void main() {
     });
     expect(legacy.showLabel, isTrue);
     expect(legacy.innerPadding, isTrue);
+    expect(legacy.border, isTrue);
   });
 
   test('language setting resolves and translates', () async {

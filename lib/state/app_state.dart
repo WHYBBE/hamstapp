@@ -1082,6 +1082,15 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Toggle whether a tile draws its backdrop/border.
+  Future<void> setTileBorder(String tileId, bool value) async {
+    final tile = tileById(tileId);
+    if (tile == null || tile.border == value) return;
+    tile.border = value;
+    await _persistTiles();
+    notifyListeners();
+  }
+
   /// Change a tile's size (width 1..kTileCols, height 1..kTileMaxH), relocating
   /// if needed. [cols] is the board's current column count.
   Future<void> setTileSize(

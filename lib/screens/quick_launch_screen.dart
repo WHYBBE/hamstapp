@@ -1214,24 +1214,23 @@ class _Tile extends StatelessWidget {
     final glass = state.tileStyle == TileStyle.glass;
     final color = _tileColor(app.appName);
     final radius = BorderRadius.circular(glass ? 14 : 10);
+    // Frameless mode is its own per-tile switch, independent of the label and
+    // inner-margin options.
+    final frameless = !tile.border;
 
     final ink = InkWell(
       onTap: editable
           ? () => _showTileMenu(context)
           : () => launchApp(context, app.packageName),
       onLongPress: editable ? null : () => _showTileMenu(context),
-      child: _inner(context, glass: glass),
+      child: _inner(context, glass: glass, frameless: frameless),
     );
 
-    // No inner margin AND the label is not actually shown (either turned off or
-    // the tile is too short to fit text): the user wants just the app icon, so
-    // drop the tile frame entirely. App icons carry their own rounded/
-    // transparent corners; keeping a colored backdrop with a different corner
-    // radius made those corners poke out as mismatched triangles. With no
-    // backdrop, the icon's own shape defines the tile and the look stays clean.
-    final height = tile.h * cellW + (tile.h - 1) * gap;
-    final labelShown = tile.showLabel && height > 46;
-    if (!tile.innerPadding && !labelShown) {
+    // No backdrop: show only the content. App icons carry their own rounded/
+    // transparent corners, so a colored backdrop with a different corner radius
+    // could poke out behind them; without a backdrop the icon's own shape
+    // defines the tile and the look stays clean.
+    if (frameless) {
       final bare = Material(
         key: const ValueKey('bare-tile'),
         type: MaterialType.transparency,
@@ -1321,9 +1320,16 @@ class _Tile extends StatelessWidget {
     );
   }
 
-  Widget _inner(BuildContext context, {required bool glass}) {
+  Widget _inner(
+    BuildContext context, {
+    required bool glass,
+    required bool frameless,
+  }) {
     final scheme = Theme.of(context).colorScheme;
-    final labelColor = glass ? scheme.onSurface : Colors.white;
+    // Without a backdrop the label sits on the page background, so use the
+    // theme's on-surface color instead of the solid style's white.
+    final labelColor =
+        (glass || frameless) ? scheme.onSurface : Colors.white;
     return LayoutBuilder(
       builder: (context, constraints) {
         final w = constraints.maxWidth;
@@ -1440,6 +1446,13 @@ class _Tile extends StatelessWidget {
                   subtitle: Text(context.strings.t('关闭后内容填满磁贴')),
                   value: state.tileById(tile.id)?.innerPadding ?? true,
                   onChanged: (v) => state.setTileInnerPadding(tile.id, v),
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.border_clear),
+                  title: Text(context.strings.t('显示边框')),
+                  subtitle: Text(context.strings.t('关闭后只显示图标/文字，无底板')),
+                  value: state.tileById(tile.id)?.border ?? true,
+                  onChanged: (v) => state.setTileBorder(tile.id, v),
                 ),
                 ListTile(
                   leading: const Icon(Icons.info_outline),
