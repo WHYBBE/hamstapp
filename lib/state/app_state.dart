@@ -2,7 +2,6 @@ import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
 import '../l10n/app_strings.dart';
 import '../models/app_info.dart';
@@ -1236,23 +1235,35 @@ class AppState extends ChangeNotifier {
     await _emitHaptic();
   }
 
+  /// Duration (ms) and amplitude (1..255) for the current effect/level.
+  ///
+  /// Flutter's built-in HapticFeedback maps to a handful of system constants
+  /// whose strength is fixed by the OS, so the effects were nearly identical
+  /// (and `selectionClick` was imperceptible). Driving the vibrator directly
+  /// gives real control; duration also carries the strength on devices that
+  /// lack amplitude control.
+  (int, int) get _hapticPulse {
+    switch (hapticEffect) {
+      case HapticEffect.selection:
+        return (25, 90);
+      case HapticEffect.vibrate:
+        return (300, 200);
+      case HapticEffect.impact:
+        switch (hapticLevel) {
+          case HapticLevel.light:
+            return (30, 140);
+          case HapticLevel.medium:
+            return (55, 210);
+          case HapticLevel.heavy:
+            return (95, 255);
+        }
+    }
+  }
+
   Future<void> _emitHaptic() async {
+    final (duration, amplitude) = _hapticPulse;
     try {
-      switch (hapticEffect) {
-        case HapticEffect.selection:
-          await HapticFeedback.selectionClick();
-        case HapticEffect.vibrate:
-          await HapticFeedback.vibrate();
-        case HapticEffect.impact:
-          switch (hapticLevel) {
-            case HapticLevel.light:
-              await HapticFeedback.lightImpact();
-            case HapticLevel.medium:
-              await HapticFeedback.mediumImpact();
-            case HapticLevel.heavy:
-              await HapticFeedback.heavyImpact();
-          }
-      }
+      await NativeApps.vibrate(duration, amplitude: amplitude);
     } catch (_) {
       // Haptics are best-effort; ignore devices/platforms without support.
     }

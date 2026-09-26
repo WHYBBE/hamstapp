@@ -13,6 +13,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.provider.Settings
 import android.util.Base64
 import androidx.core.content.FileProvider
@@ -106,6 +109,11 @@ class PackageScannerPlugin(
             "uninstallApp" -> {
                 val pkg = call.argument<String>("packageName")
                 mainHandler.post { result.success(pkg != null && requestUninstall(pkg)) }
+            }
+            "vibrate" -> {
+                val duration = call.argument<Int>("duration") ?: 30
+                val amplitude = call.argument<Int>("amplitude") ?: -1
+                mainHandler.post { result.success(vibrate(duration, amplitude)) }
             }
             "getDeviceInfo" -> {
                 executor.execute {
@@ -292,6 +300,43 @@ class PackageScannerPlugin(
             context.startActivity(intent)
             true
         }.getOrDefault(false)
+    }
+
+    /**
+     * Plays a one-shot vibration. [amplitude] is 1..255 (0/negative = device
+     * default). Duration carries the strength when the device lacks amplitude
+     * control, so the levels stay distinguishable on older hardware.
+     */
+    private fun vibrate(durationMs: Int, amplitude: Int): Boolean {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val manager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE)
+                as? VibratorManager
+            manager?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        } ?: return false
+        if (!vibrator.hasVibrator()) return false
+        val ms = durationMs.coerceIn(1, 1000).toLong()
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val effect = if (amplitude > 0 && vibrator.hasAmplitudeControl()) {
+                    VibrationEffect.createOneShot(
+                        ms,
+                        amplitude.coerceIn(1, 255)
+                    )
+                } else {
+                    VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE)
+                }
+                vibrator.vibrate(effect)
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(ms)
+            }
+            true
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     // ---------------------------------------------------------------- remote

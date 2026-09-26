@@ -73,6 +73,14 @@ class NativeApps {
     return ok ?? false;
   }
 
+  /// Plays a one-shot vibration. [amplitude] is 1..255 (<=0 = device default).
+  static Future<void> vibrate(int durationMs, {int amplitude = -1}) async {
+    await _channel.invokeMethod<bool>('vibrate', {
+      'duration': durationMs,
+      'amplitude': amplitude,
+    });
+  }
+
   static Future<Map<String, dynamic>> getDeviceInfo() async {
     final info = await _channel.invokeMethod<Map<dynamic, dynamic>>('getDeviceInfo');
     return (info ?? {}).cast<String, dynamic>();
