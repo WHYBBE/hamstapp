@@ -335,18 +335,21 @@ void main() {
     final tile = find.byKey(const ValueKey('t1'));
     final icon = find.descendant(of: tile, matching: find.byType(AppIcon));
 
-    // Icon-only with the default inner margin.
+    // Icon-only with the default inner margin keeps a tile frame.
     await state.setTileShowLabel('t1', false);
     await tester.pump();
+    expect(find.byKey(const ValueKey('bare-tile')), findsNothing);
     final padded = tester.widget<AppIcon>(icon).size;
 
-    // Dropping the margin makes the icon grow to fill the tile.
+    // Dropping the margin makes the icon grow to fill the tile...
     await state.setTileInnerPadding('t1', false);
     await tester.pump();
     final full = tester.widget<AppIcon>(icon).size;
-
     expect(full, greaterThan(padded));
     expect(full, closeTo(tester.getSize(tile).shortestSide, 0.5));
+    // ...and, being icon-only too, the tile frame is dropped so the icon's own
+    // shape (not a mismatched colored backdrop) defines the tile.
+    expect(find.byKey(const ValueKey('bare-tile')), findsOneWidget);
   });
 
   testWidgets('category screen can add an app to the category', (tester) async {

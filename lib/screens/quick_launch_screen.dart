@@ -1223,6 +1223,23 @@ class _Tile extends StatelessWidget {
       child: _inner(context, glass: glass),
     );
 
+    // No inner margin AND the label is not actually shown (either turned off or
+    // the tile is too short to fit text): the user wants just the app icon, so
+    // drop the tile frame entirely. App icons carry their own rounded/
+    // transparent corners; keeping a colored backdrop with a different corner
+    // radius made those corners poke out as mismatched triangles. With no
+    // backdrop, the icon's own shape defines the tile and the look stays clean.
+    final height = tile.h * cellW + (tile.h - 1) * gap;
+    final labelShown = tile.showLabel && height > 46;
+    if (!tile.innerPadding && !labelShown) {
+      final bare = Material(
+        key: const ValueKey('bare-tile'),
+        type: MaterialType.transparency,
+        child: ink,
+      );
+      return editable ? _editFrame(bare, radius, scheme.primary) : bare;
+    }
+
     if (!glass) {
       final tappable = Material(
         color: color,
