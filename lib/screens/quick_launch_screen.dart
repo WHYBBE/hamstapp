@@ -376,12 +376,9 @@ class _TilesTabState extends State<_TilesTab> {
     final stateChanged = widget.state.currentTilePageIndex != i;
     final localChanged = _index != i;
     if (!stateChanged && !localChanged) return;
-    // Chip taps land here immediately; swipe settles land here after the
-    // animation, but the drag-release handler has already ticked by then.
-    if (!_draggingPages && i != _lastHapticPage) {
-      _lastHapticPage = i;
-      widget.state.haptic(HapticTrigger.tilePages);
-    }
+    // No haptic here: onPageChanged also fires for every intermediate page
+    // while chip taps animate across the pager, which caused a buzz per page.
+    // Swipes tick from _onPagesScroll; taps/adds tick at their call sites.
     if (localChanged) setState(() => _index = i);
     if (stateChanged) widget.state.setCurrentTilePage(i);
   }
@@ -443,6 +440,12 @@ class _TilesTabState extends State<_TilesTab> {
           currentIndex: _index,
           editing: state.tileEditMode,
           onSelect: (i) {
+            // One tick for the tap, regardless of how many pages the animation
+            // glides across.
+            if (_clamp(i) != _index) {
+              state.haptic(HapticTrigger.tilePages);
+              _lastHapticPage = _clamp(i);
+            }
             _setIndex(i);
             if (_controller.hasClients &&
                 (_controller.page?.round() ?? 0) != i) {
@@ -458,6 +461,8 @@ class _TilesTabState extends State<_TilesTab> {
             if (page == null || !mounted) return;
             final idx = state.tilePages.indexWhere((p) => p.id == page.id);
             if (idx < 0) return;
+            state.haptic(HapticTrigger.tilePages);
+            _lastHapticPage = idx;
             _setIndex(idx);
             _jumpTo(idx);
           },

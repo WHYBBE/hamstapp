@@ -100,6 +100,37 @@ void main() {
     expect(vibrates, greaterThan(0));
   });
 
+  testWidgets('tapping a distant tile page chip vibrates only once', (
+    tester,
+  ) async {
+    final state = AppState(_MemStorage())
+      ..initialized = true
+      ..apps = [_ai('com.a', 'A')]
+      ..tilePages = [
+        TilePage(id: 'p1', name: 'P1', createdAt: 0),
+        TilePage(id: 'p2', name: 'P2', createdAt: 0),
+        TilePage(id: 'p3', name: 'P3', createdAt: 0),
+      ]
+      ..currentTilePageIndex = 0;
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AppState>.value(
+        value: state,
+        child: const MaterialApp(home: QuickLaunchScreen()),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+
+    vibrates = 0;
+    // Jump from page 1 to page 3; the animation glides across page 2 but the
+    // haptic must fire once, not once per page passed.
+    await tester.tap(find.text('P3'));
+    await tester.pumpAndSettle();
+
+    expect(vibrates, 1);
+    expect(state.currentTilePageIndex, 2);
+  });
+
   testWidgets('swiping tile pages vibrates while dragging', (tester) async {
     final state = AppState(_MemStorage())
       ..initialized = true
